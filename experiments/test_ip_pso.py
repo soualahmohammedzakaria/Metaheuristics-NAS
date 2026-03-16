@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from nas_framework.ip_pso_search import IPPSOSearch
+from nas_framework.ip_pso_search import IPPSOSearch, IPRandomSearch
 from nas_framework.ip_pso_population import PSOPopulation
 from nas_framework.ip_evaluator import IPPSOEvaluator
 from nas_framework.search_strategy import RandomSearch
@@ -18,7 +18,8 @@ from nas_framework.search_strategy import RandomSearch
 BUDGETS = [100, 300, 500, 1000]
 N_RUNS  = 10
 STRATEGIES = [
-    ("MO IPPSO",  IPPSOSearch, dict()),
+    ("Random Search", IPRandomSearch, dict()),
+    ("MO IPPSO",       IPPSOSearch,    dict()),
 ]
 # ─────────────────────────────────────────────────────────────────────────────
 
