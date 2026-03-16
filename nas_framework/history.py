@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 
@@ -31,7 +31,12 @@ class History:
             )
         )
         # Store a detached snapshot so later changes do not mutate history.
-        self.pareto_archive.append([
-            Individual(ind.genotype[:], ind.fitness) for ind in pareto_front
-        ])
-
+        archive_layer = []
+        for ind in pareto_front:
+            # Handle standard GA Individual or IPPSO PSOParticle
+            if hasattr(ind, 'genotype'):
+                archive_layer.append(Individual(ind.genotype[:], ind.fitness))
+            elif hasattr(ind, 'personal_best_position'):
+                # Store the tracked position, fitness is alias of current_fitness
+                archive_layer.append(Individual(ind.personal_best_position[:], ind.fitness))
+        self.pareto_archive.append(archive_layer)

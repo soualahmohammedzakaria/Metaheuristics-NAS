@@ -87,10 +87,13 @@ class IPPSOEvaluator:
             self.train_loader = DataLoader(self.train_dataset, batch_size=batch_size, shuffle=True)
             self.fitness_loader = DataLoader(self.fitness_dataset, batch_size=200, shuffle=False)
 
-    def evaluate(self, position) -> float:
+    def evaluate(self, position) -> tuple[float, float]:
         if self.mock:
-            # Mock fitness: sum of bytes / 255 / len, as a simple proxy
-            return sum(position) / (255 * len(position))
+            import random
+            # Mock fitness: sum of bytes / 255 / len + small noise
+            acc = sum(position) / (255 * len(position)) + random.uniform(-0.05, 0.05)
+            lat = (len(position) + sum(position) / 255.0) * 1.5 + random.uniform(-1.0, 1.0)
+            return acc, lat
         else:
             # Actual training
             layers = []
@@ -103,6 +106,10 @@ class IPPSOEvaluator:
                 layers.append(Layer(LayerType.FC, num_neurons=self.num_classes))
             builder = CNNBuilder(layers, self.num_classes)
             model = builder.build().to(self.device)
+            # Calculate latency proxy via parameters
+            total_params = sum(p.numel() for p in model.parameters())
+            latency = float(total_params) / 1000.0
+            
             for m in model.modules():
                 if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
                     nn.init.xavier_uniform_(m.weight)
@@ -127,11 +134,13 @@ class IPPSOEvaluator:
                     _, predicted = torch.max(outputs.data, 1)
                     total += labels.size(0)
                     correct += (predicted == labels).sum().item()
-            return correct / total
+            return correct / total, latency
 
-    def retrain_and_evaluate_testset(self, position, epochs=10) -> float:
+    def retrain_and_evaluate_testset(self, position, epochs=10) -> tuple[float, float]:
         if self.mock:
-            return sum(position) / (255 * len(position)) + 0.1
+            acc = sum(position) / (255 * len(position)) + 0.1
+            lat = (len(position) + sum(position) / 255.0) * 1.5
+            return acc, lat
 
         # Use full train dataset
         transform = transforms.Compose([
@@ -175,6 +184,10 @@ class IPPSOEvaluator:
                 loss.backward()
                 optimizer.step()
                 
+        # Approximate final latency 
+        total_params = sum(p.numel() for p in model.parameters())
+        latency = float(total_params) / 1000.0
+
         model.eval()
         correct = 0
         total = 0
@@ -186,4 +199,4 @@ class IPPSOEvaluator:
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
                 
-        return correct / total
+        return correct / total, latency
