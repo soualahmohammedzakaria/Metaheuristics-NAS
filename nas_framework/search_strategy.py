@@ -8,6 +8,8 @@ from nas_framework.replacement import Replacement
 from nas_framework.evaluator import Evaluator
 from nas_framework.termination import Termination, MaxEvaluationsTermination
 from nas_framework.history import History
+from nas_framework.search_space import SearchSpace
+from nas_framework.mo_utils import pareto_front as compute_pareto_front
 
 
 class SearchStrategy(ABC):
@@ -133,7 +135,7 @@ class EvolutionStrategy(SearchStrategy):
 
 
 class RandomSearch(SearchStrategy):
-    """Random search baseline â€” samples new architectures each iteration."""
+    """Random search baseline  samples new architectures each iteration."""
 
     def __init__(self, population: Population, selection: Selection,
                  crossover: Crossover, mutation: Mutation,
@@ -172,4 +174,47 @@ class RandomSearch(SearchStrategy):
             self._record_history()
 
         return self.population
+
+
+class BruteForceParetoSearch:
+    """Exhaustive strategy that returns the optimal Pareto front on finite spaces."""
+
+    def __init__(self, search_space: SearchSpace, evaluator: Evaluator,
+                 history: History | None = None):
+        self.search_space = search_space
+        self.evaluator = evaluator
+        self.history = history or History()
+        self.evaluations: int = 0
+        self.generations: int = 0
+        self.population: list[Individual] = []
+
+    def run(self) -> list[Individual]:
+        if not hasattr(self.search_space, "all_genotypes"):
+            raise TypeError(
+                "BruteForceParetoSearch requires a finite search space exposing "
+                "all_genotypes()."
+            )
+
+        individuals: list[Individual] = []
+        for genotype in self.search_space.all_genotypes():
+            fitness = self.evaluator.evaluate(genotype)
+            metadata = {}
+            if hasattr(self.search_space, "metadata_from_genotype"):
+                metadata = self.search_space.metadata_from_genotype(genotype)
+            elif hasattr(self.evaluator.benchmark, "get_metadata"):
+                metadata = self.evaluator.benchmark.get_metadata(genotype)
+            individuals.append(Individual(genotype[:], fitness, metadata=metadata))
+
+        self.population = individuals
+        self.evaluations = len(individuals)
+        self.generations = 1
+
+        front = compute_pareto_front(individuals, self.evaluator.objective_directions)
+        self.history.record(
+            generation=0,
+            evaluations=self.evaluations,
+            population=individuals,
+            pareto_front=front,
+        )
+        return front
 
