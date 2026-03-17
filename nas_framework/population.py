@@ -60,3 +60,100 @@ class Population:
     def __iter__(self):
         return iter(self.individuals)
 
+
+# ---------------------------------------------------------------------------
+# ABC-specific extensions  (HiveNAS, Shahawy & Benkhelifa, arXiv:2211.10250v2)
+# ---------------------------------------------------------------------------
+
+def _weighted_score(fitness: tuple[float, ...], directions: tuple[int, ...]) -> float:
+    """Scalar score used for greedy keep-best comparison across objectives."""
+    return sum(v * d for v, d in zip(fitness, directions))
+
+
+class FoodSource:
+    """Wraps an Individual with an ABC abandonment trial counter.
+
+    Each food source tracks how many consecutive evaluations have been made
+    without improvement.  Once trial_count reaches the abandonment_limit the
+    scout phase resets it to a new random position.
+    """
+
+    def __init__(self, individual: Individual):
+        self.individual = individual
+        self.trial_count: int = 0
+
+    def reset(self, individual: Individual) -> None:
+        self.individual = individual
+        self.trial_count = 0
+
+    def update(self, candidate: Individual, directions: tuple[int, ...]) -> bool:
+        """Greedy selection: keep candidate if it improves the scalar score.
+
+        Returns True if the source was updated (improvement found).
+        """
+        if candidate.fitness is None:
+            self.trial_count += 1
+            return False
+        if self.individual.fitness is None:
+            self.individual = candidate
+            self.trial_count = 0
+            return True
+        if _weighted_score(candidate.fitness, directions) > _weighted_score(self.individual.fitness, directions):
+            self.individual = candidate
+            self.trial_count = 0
+            return True
+        self.trial_count += 1
+        return False
+
+
+class ABCPopulation(Population):
+    """Population of FoodSources for the ABC algorithm.
+
+    Parameters
+    ----------
+    search_space, evaluator, size : same as Population.
+    abandonment_limit : int
+        Consecutive failed trials before a scout resets the source.
+        Defaults to 10 * num_edges when not specified.
+    """
+
+    def __init__(self, search_space: SearchSpace, evaluator: Evaluator,
+                 size: int = 10, abandonment_limit: int | None = None):
+        super().__init__(search_space, evaluator, size)
+        self.abandonment_limit: int = (
+            abandonment_limit if abandonment_limit is not None
+            else 10 * search_space.num_edges
+        )
+        self.food_sources: list[FoodSource] = []
+
+    def initialize(self) -> None:
+        """Scout phase: randomly sample and evaluate all food sources."""
+        self.food_sources = []
+        self.individuals = []
+        for _ in range(self.size):
+            geno = self.search_space.random_individual()
+            fit = self.evaluator.evaluate(geno)
+            metadata = {}
+            if hasattr(self.search_space, "metadata_from_genotype"):
+                metadata = self.search_space.metadata_from_genotype(geno)
+            ind = Individual(geno, fit, metadata=metadata)
+            self.food_sources.append(FoodSource(ind))
+            self.individuals.append(ind)
+
+    def sync_individuals(self) -> None:
+        """Keep self.individuals aligned with current food-source states."""
+        self.individuals = [fs.individual for fs in self.food_sources]
+
+    def scout_reset(self, directions: tuple[int, ...]) -> int:
+        """Reset exhausted sources; return the number of resets performed."""
+        resets = 0
+        for fs in self.food_sources:
+            if fs.trial_count >= self.abandonment_limit:
+                geno = self.search_space.random_individual()
+                fit = self.evaluator.evaluate(geno)
+                metadata = {}
+                if hasattr(self.search_space, "metadata_from_genotype"):
+                    metadata = self.search_space.metadata_from_genotype(geno)
+                fs.reset(Individual(geno, fit, metadata=metadata))
+                resets += 1
+        return resets

@@ -32,14 +32,54 @@ class TournamentSelection(Selection):
 
 
 class RouletteWheelSelection(Selection):
-    """Compatibility alias that now delegates to Pareto tournament selection."""
+    """Fitness-proportionate (roulette wheel) selection for the ABC onlooker phase.
 
-    def __init__(self, k: int = 3):
-        self._delegate = TournamentSelection(k=k)
+    HiveNAS (Shahawy & Benkhelifa, arXiv:2211.10250v2, §3.1.3) uses the
+    classical ABC fitness function to convert raw objective scores into
+    probabilities:
+
+        fit_m(x) = 1 / (1 + f_m(x))   if f_m >= 0      (Eq. 3)
+                 = 1 + |f_m(x)|        if f_m <  0
+
+        p_m = fit_m / sum(fit_j)                         (Eq. 4)
+
+    For multi-objective problems we derive a scalar score via a weighted sum
+    (value * direction) before applying the ABC fitness transform.  This
+    preserves the original probabilistic selection behaviour while staying
+    compatible with the rest of the framework.
+
+    Falls back to uniform random selection when all scores are equal or zero.
+    """
+
+    @staticmethod
+    def _abc_fitness(score: float) -> float:
+        """ABC fitness transform (Eq. 3)."""
+        if score >= 0:
+            return 1.0 / (1.0 + score)
+        return 1.0 + abs(score)
 
     def select(self, individuals: list[Individual], n: int,
                objective_directions: tuple[int, ...]) -> list[Individual]:
-        return self._delegate.select(individuals, n, objective_directions)
+        eligible = [ind for ind in individuals if ind.fitness is not None]
+        if not eligible:
+            return random.sample(individuals, min(n, len(individuals)))
+
+        # Scalar score per individual (weighted sum across objectives).
+        raw_scores = [
+            sum(v * d for v, d in zip(ind.fitness, objective_directions))
+            for ind in eligible
+        ]
+
+        # Apply ABC fitness transform (Eq. 3).
+        fit_scores = [self._abc_fitness(s) for s in raw_scores]
+        total = sum(fit_scores)
+
+        if total == 0:
+            return random.choices(eligible, k=n)
+
+        # Build cumulative probability wheel and spin it n times (Eq. 4).
+        probs = [f / total for f in fit_scores]
+        return random.choices(eligible, weights=probs, k=n)
 
 
 class NeighborSelection(Selection):

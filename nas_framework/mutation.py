@@ -42,3 +42,22 @@ class BitFlipMutation(Mutation):
                 geno[i] = random.randint(0, self.search_space.num_ops - 1)
         return Individual(geno)
 
+
+class ABCNeighborSampler(SinglePointMutation):
+    """1-operation neighbor sampler for the HiveNAS ABC search strategy.
+
+    HiveNAS (Shahawy & Benkhelifa, arXiv:2211.10250v2, §3.2.3) adapts the
+    classical continuous ABC neighbor formula (Eq. 2) to the discrete NAS
+    space using the convention from White et al. [2021]:
+
+        "Two architectures are neighbors if there is a 1-operation
+         (i.e. layer) difference between them."
+
+    This is identical to SinglePointMutation (flip one random edge to a
+    different op), so ABCNeighborSampler simply exposes a ``sample_neighbor``
+    alias to match the ABC terminology used in ABCSearchStrategy.
+    """
+
+    def sample_neighbor(self, individual: Individual) -> Individual:
+        """Return a new Individual differing in exactly one operation."""
+        return self.mutate(individual)
