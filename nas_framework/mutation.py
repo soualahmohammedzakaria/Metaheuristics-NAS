@@ -1,8 +1,9 @@
 ﻿from abc import ABC, abstractmethod
 import random
 from copy import deepcopy
+import numpy as np
 from nas_framework.population import Individual
-from nas_framework.search_space import SearchSpace
+from nas_framework.search_space import SearchSpace, NASSearchSpace
 
 
 class Mutation(ABC):
@@ -41,4 +42,18 @@ class BitFlipMutation(Mutation):
             if random.random() < self.rate:
                 geno[i] = random.randint(0, self.search_space.num_ops - 1)
         return Individual(geno)
+
+
+class UniformMutation:
+    """Uniform per-gene mutation for Dvolver (Appendix A.1)."""
+
+    def __init__(self, mutation_prob: float = 0.1):
+        self.mutation_prob = mutation_prob
+
+    def mutate(self, individual: Individual, search_space: NASSearchSpace) -> Individual:
+        genes = np.array(search_space.encode(individual.architecture), copy=True)
+        for pos in range(genes.shape[0]):
+            if random.random() < self.mutation_prob:
+                genes[pos] = search_space.random_value_for_gene(pos)
+        return Individual(search_space.decode(genes))
 

@@ -1,0 +1,62 @@
+{
+  "Dvolver-A": {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        1,
+        3,
+        0
+      ],
+      "arch_id": 13413,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|skip_connect~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.30666,
+      80.82257988907908
+    ],
+    "rank": 0,
+    "crowding_distance": 0.7251638922619678
+  },
+  "Dvolver-B": {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        4,
+        2,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 13320,
+      "architecture_details": "|none~0|+|avg_pool_3x3~0|nor_conv_1x1~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      63.04,
+      106.33674486422765
+    ],
+    "rank": 0,
+    "crowding_distance": 0.27504680441785434
+  },
+  "Dvolver-C": {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        4,
+        2,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 13320,
+      "architecture_details": "|none~0|+|avg_pool_3x3~0|nor_conv_1x1~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      63.04,
+      106.33674486422765
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  }
+}

@@ -8,6 +8,15 @@ from nas_framework.replacement import Replacement
 from nas_framework.evaluator import Evaluator
 from nas_framework.termination import Termination, MaxEvaluationsTermination
 from nas_framework.history import History
+from nas_framework.search_space import NASSearchSpace
+from nas_framework.evaluator import DvolverEvaluator
+from nas_framework.selection import BinaryTournamentSelection
+from nas_framework.variation import DvolverVariation
+from nas_framework.crossover import DvolverUniformCrossover
+from nas_framework.mutation import UniformMutation
+from nas_framework.replacement import DvolverReplacement
+from nas_framework.termination import TerminationCriteria
+from nas_framework.mo_utils import fast_non_dominated_sort_max, compute_crowding_distance
 
 
 class SearchStrategy(ABC):
@@ -172,4 +181,76 @@ class RandomSearch(SearchStrategy):
             self._record_history()
 
         return self.population
+
+
+class DvolverSearchStrategy:
+    """Dvolver multi-objective NAS search loop."""
+
+    def __init__(
+        self,
+        population_size: int = 32,
+        crossover_prob: float = 0.1,
+        mutation_prob: float = 0.1,
+        search_space: NASSearchSpace | None = None,
+        evaluator: DvolverEvaluator | None = None,
+        termination: TerminationCriteria | None = None,
+    ):
+        self.population_size = population_size
+        self.search_space = search_space or NASSearchSpace()
+        self.evaluator = evaluator or DvolverEvaluator()
+        self.termination = termination or TerminationCriteria(max_generations=50)
+
+        self.population = Population(size=population_size)
+        self.history = History()
+        self.selection = BinaryTournamentSelection()
+        self.variation = DvolverVariation(
+            crossover=DvolverUniformCrossover(self.search_space, crossover_prob=crossover_prob),
+            mutation=UniformMutation(mutation_prob=mutation_prob),
+        )
+        self.replacement = DvolverReplacement()
+
+    @staticmethod
+    def _assign_rank_and_crowding(individuals: list[Individual]) -> None:
+        fronts = fast_non_dominated_sort_max(individuals)
+        for front in fronts:
+            compute_crowding_distance(front)
+
+    def _evaluate_population(self, individuals: list[Individual]) -> None:
+        for ind in individuals:
+            ind.objectives = self.evaluator.evaluate(ind.architecture)
+
+    def run(self) -> History:
+        # Step 1: initialize random population.
+        init_architectures = [self.search_space.random_architecture() for _ in range(self.population_size)]
+        self.population.individuals = [Individual(arch) for arch in init_architectures]
+        self._evaluate_population(self.population.individuals)
+        self._assign_rank_and_crowding(self.population.individuals)
+
+        generation = 0
+        self.history.update(generation=generation, population=self.population.individuals)
+
+        while not self.termination.should_terminate(self.history, generation):
+            # a) Parent selection
+            parents = self.selection.select_parents(self.population.individuals, self.population_size)
+
+            # b) Variation
+            offspring = self.variation.generate_offspring(parents, self.search_space)
+
+            # c) Evaluate offspring
+            self._evaluate_population(offspring)
+
+            # d) Survivor selection from 2N
+            survivors = self.replacement.select_survivors(
+                self.population.individuals,
+                offspring,
+                self.population_size,
+            )
+            self.population.individuals = survivors
+            self._assign_rank_and_crowding(self.population.individuals)
+
+            # e) Update history
+            generation += 1
+            self.history.update(generation=generation, population=self.population.individuals)
+
+        return self.history
 

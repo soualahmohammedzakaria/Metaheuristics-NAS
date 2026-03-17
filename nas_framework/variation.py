@@ -6,6 +6,9 @@ import random
 from nas_framework.crossover import Crossover
 from nas_framework.mutation import Mutation
 from nas_framework.population import Individual
+from nas_framework.search_space import NASSearchSpace
+from nas_framework.crossover import DvolverUniformCrossover
+from nas_framework.mutation import UniformMutation
 
 
 class Variation(ABC):
@@ -54,4 +57,31 @@ class MutationOnlyVariation(Variation):
             child = self.mutation.mutate(p)
             offspring.append(child)
         return offspring
+
+
+class DvolverVariation:
+    """Dvolver variation: random pairing + uniform crossover + uniform mutation."""
+
+    def __init__(self, crossover: DvolverUniformCrossover, mutation: UniformMutation):
+        self.crossover = crossover
+        self.mutation = mutation
+
+    def generate_offspring(self, parents: list[Individual], search_space: NASSearchSpace) -> list[Individual]:
+        if not parents:
+            return []
+
+        shuffled = parents[:]
+        random.shuffle(shuffled)
+        if len(shuffled) % 2 == 1:
+            shuffled.append(random.choice(shuffled))
+
+        offspring: list[Individual] = []
+        for idx in range(0, len(shuffled), 2):
+            p1 = shuffled[idx]
+            p2 = shuffled[idx + 1]
+            c1, c2 = self.crossover.crossover(p1, p2)
+            offspring.append(self.mutation.mutate(c1, search_space))
+            offspring.append(self.mutation.mutate(c2, search_space))
+
+        return offspring[:len(parents)]
 

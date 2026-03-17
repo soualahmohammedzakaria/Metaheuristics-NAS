@@ -14,16 +14,24 @@ def _as_maximization_vector(fitness: tuple[float, ...],
 
 
 def dominates(a: Individual, b: Individual,
-              directions: tuple[int, ...]) -> bool:
-    af = _as_maximization_vector(a.fitness, directions)
-    bf = _as_maximization_vector(b.fitness, directions)
+              directions: tuple[int, ...] | None = None) -> bool:
+    if a.fitness is None or b.fitness is None:
+        return False
+
+    if directions is None:
+        af = a.fitness
+        bf = b.fitness
+    else:
+        af = _as_maximization_vector(a.fitness, directions)
+        bf = _as_maximization_vector(b.fitness, directions)
+
     no_worse = all(x >= y for x, y in zip(af, bf))
     strictly_better = any(x > y for x, y in zip(af, bf))
     return no_worse and strictly_better
 
 
 def fast_non_dominated_sort(individuals: list[Individual],
-                            directions: tuple[int, ...]) -> list[list[Individual]]:
+                            directions: tuple[int, ...] | None = None) -> list[list[Individual]]:
     fronts: list[list[Individual]] = []
     domination_count: dict[int, int] = {}
     dominates_set: dict[int, list[int]] = {}
@@ -61,7 +69,7 @@ def fast_non_dominated_sort(individuals: list[Individual],
 
 
 def crowding_distance(front: list[Individual],
-                      directions: tuple[int, ...]) -> None:
+                      directions: tuple[int, ...] | None = None) -> None:
     if not front:
         return
     if len(front) <= 2:
@@ -74,23 +82,35 @@ def crowding_distance(front: list[Individual],
 
     n_obj = len(front[0].fitness)
     for obj in range(n_obj):
-        front.sort(key=lambda ind: ind.fitness[obj] * directions[obj])
+        if directions is None:
+            front.sort(key=lambda ind: ind.fitness[obj])
+        else:
+            front.sort(key=lambda ind: ind.fitness[obj] * directions[obj])
         front[0].crowding_distance = float("inf")
         front[-1].crowding_distance = float("inf")
 
-        min_v = front[0].fitness[obj] * directions[obj]
-        max_v = front[-1].fitness[obj] * directions[obj]
+        if directions is None:
+            min_v = front[0].fitness[obj]
+            max_v = front[-1].fitness[obj]
+        else:
+            min_v = front[0].fitness[obj] * directions[obj]
+            max_v = front[-1].fitness[obj] * directions[obj]
+
         if max_v == min_v:
             continue
 
         for i in range(1, len(front) - 1):
-            prev_v = front[i - 1].fitness[obj] * directions[obj]
-            next_v = front[i + 1].fitness[obj] * directions[obj]
+            if directions is None:
+                prev_v = front[i - 1].fitness[obj]
+                next_v = front[i + 1].fitness[obj]
+            else:
+                prev_v = front[i - 1].fitness[obj] * directions[obj]
+                next_v = front[i + 1].fitness[obj] * directions[obj]
             front[i].crowding_distance += (next_v - prev_v) / (max_v - min_v)
 
 
 def assign_rank_and_crowding(individuals: list[Individual],
-                             directions: tuple[int, ...]) -> list[list[Individual]]:
+                             directions: tuple[int, ...] | None = None) -> list[list[Individual]]:
     fronts = fast_non_dominated_sort(individuals, directions)
     for front in fronts:
         crowding_distance(front, directions)
@@ -103,7 +123,7 @@ def pareto_sort_key(ind: Individual) -> tuple[float, float]:
 
 
 def take_pareto_best(individuals: list[Individual], n: int,
-                     directions: tuple[int, ...]) -> list[Individual]:
+                     directions: tuple[int, ...] | None = None) -> list[Individual]:
     if not individuals:
         return []
     fronts = assign_rank_and_crowding(individuals, directions)
@@ -119,10 +139,78 @@ def take_pareto_best(individuals: list[Individual], n: int,
 
 
 def pareto_front(individuals: Iterable[Individual],
-                 directions: tuple[int, ...]) -> list[Individual]:
+                 directions: tuple[int, ...] | None = None) -> list[Individual]:
     inds = list(individuals)
     if not inds:
         return []
     fronts = assign_rank_and_crowding(inds, directions)
     return fronts[0] if fronts else []
+
+
+def compute_crowding_distance(front: list[Individual]) -> None:
+    """Dvolver/NSGA-II crowding distance for maximization objectives."""
+    crowding_distance(front, directions=None)
+
+
+def crowded_comparison(ind_a: Individual, ind_b: Individual) -> bool:
+    """True if ind_a is preferred over ind_b by rank then crowding distance."""
+    if ind_a.rank != ind_b.rank:
+        return ind_a.rank < ind_b.rank
+    return ind_a.crowding_distance > ind_b.crowding_distance
+
+
+def fast_non_dominated_sort_max(population: list[Individual]) -> list[list[Individual]]:
+    """NSGA-II non-dominated sorting with both objectives maximized."""
+    return fast_non_dominated_sort(population, directions=None)
+
+
+def _point_dominates(p: tuple[float, float], q: tuple[float, float]) -> bool:
+    return (p[0] >= q[0] and p[1] >= q[1]) and (p[0] > q[0] or p[1] > q[1])
+
+
+def _non_dominated_points(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    nd: list[tuple[float, float]] = []
+    for i, p in enumerate(points):
+        dominated = False
+        for j, q in enumerate(points):
+            if i == j:
+                continue
+            if _point_dominates(q, p):
+                dominated = True
+                break
+        if not dominated:
+            nd.append(p)
+
+    # Keep unique points and sorted by objective-1 ascending for 2D sweep.
+    return sorted(set(nd), key=lambda x: (x[0], x[1]))
+
+
+def compute_hypervolume(pareto_front: list[Individual],
+                        reference_point: tuple[float, float] = (0.0, 0.0)) -> float:
+    """2D hypervolume for maximize-maximize objectives using a sweep in x."""
+    if not pareto_front:
+        return 0.0
+
+    rx, ry = reference_point
+    points: list[tuple[float, float]] = []
+    for ind in pareto_front:
+        if ind.fitness is None:
+            continue
+        x = float(ind.fitness[0])
+        y = float(ind.fitness[1])
+        if x > rx and y > ry:
+            points.append((x, y))
+
+    if not points:
+        return 0.0
+
+    nd_points = _non_dominated_points(points)
+    hv = 0.0
+    prev_x = rx
+    for x, y in nd_points:
+        width = max(0.0, x - prev_x)
+        height = max(0.0, y - ry)
+        hv += width * height
+        prev_x = x
+    return hv
 

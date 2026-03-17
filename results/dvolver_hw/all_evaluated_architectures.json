@@ -1,0 +1,3842 @@
+[
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        2,
+        2,
+        3,
+        3,
+        1
+      ],
+      "arch_id": 1824,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_1x1~0|nor_conv_1x1~1|+|nor_conv_3x3~0|nor_conv_3x3~1|skip_connect~2|"
+    },
+    "objectives": [
+      68.793335,
+      27.598045506417236
+    ],
+    "rank": 2,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        4,
+        3,
+        2,
+        0,
+        2
+      ],
+      "arch_id": 409,
+      "architecture_details": "|none~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|nor_conv_1x1~2|"
+    },
+    "objectives": [
+      65.27333,
+      39.46785491221856
+    ],
+    "rank": 2,
+    "crowding_distance": 0.39614918962676715
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        4,
+        2,
+        2,
+        2,
+        3
+      ],
+      "arch_id": 12149,
+      "architecture_details": "|avg_pool_3x3~0|+|avg_pool_3x3~0|nor_conv_1x1~1|+|nor_conv_1x1~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      66.82,
+      29.82077549910771
+    ],
+    "rank": 3,
+    "crowding_distance": 0.6170844257333048
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        0,
+        1,
+        1,
+        3,
+        2
+      ],
+      "arch_id": 4506,
+      "architecture_details": "|none~0|+|none~0|skip_connect~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_1x1~2|"
+    },
+    "objectives": [
+      58.4,
+      39.05529155263335
+    ],
+    "rank": 3,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        2,
+        1,
+        2,
+        4,
+        4,
+        4
+      ],
+      "arch_id": 4012,
+      "architecture_details": "|nor_conv_1x1~0|+|skip_connect~0|nor_conv_1x1~1|+|avg_pool_3x3~0|avg_pool_3x3~1|avg_pool_3x3~2|"
+    },
+    "objectives": [
+      60.606667,
+      31.99262889830183
+    ],
+    "rank": 5,
+    "crowding_distance": 2.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        4,
+        0,
+        1,
+        1,
+        1
+      ],
+      "arch_id": 3657,
+      "architecture_details": "|nor_conv_3x3~0|+|avg_pool_3x3~0|none~1|+|skip_connect~0|skip_connect~1|skip_connect~2|"
+    },
+    "objectives": [
+      59.01,
+      43.153495169872436
+    ],
+    "rank": 2,
+    "crowding_distance": 0.9384141146367498
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        4,
+        1,
+        0,
+        1,
+        0
+      ],
+      "arch_id": 2286,
+      "architecture_details": "|skip_connect~0|+|avg_pool_3x3~0|skip_connect~1|+|none~0|skip_connect~1|none~2|"
+    },
+    "objectives": [
+      58.106667,
+      77.91614819963053
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        2,
+        2,
+        2,
+        4,
+        2,
+        3
+      ],
+      "arch_id": 12066,
+      "architecture_details": "|nor_conv_1x1~0|+|nor_conv_1x1~0|nor_conv_1x1~1|+|avg_pool_3x3~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      68.06,
+      27.145261883438977
+    ],
+    "rank": 3,
+    "crowding_distance": 0.43630116439586625
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        0,
+        2,
+        4,
+        0,
+        3
+      ],
+      "arch_id": 1679,
+      "architecture_details": "|nor_conv_3x3~0|+|none~0|nor_conv_1x1~1|+|avg_pool_3x3~0|none~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      67.973335,
+      38.36254833201558
+    ],
+    "rank": 1,
+    "crowding_distance": 0.5960004677416408
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        2,
+        3,
+        2,
+        3,
+        4,
+        0
+      ],
+      "arch_id": 11087,
+      "architecture_details": "|nor_conv_1x1~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|nor_conv_3x3~0|avg_pool_3x3~1|none~2|"
+    },
+    "objectives": [
+      66.9,
+      42.93456921921983
+    ],
+    "rank": 1,
+    "crowding_distance": 1.3152491586325317
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        2,
+        1,
+        2,
+        0,
+        3
+      ],
+      "arch_id": 12135,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_1x1~0|skip_connect~1|+|nor_conv_1x1~0|none~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      68.8,
+      35.82379778469216
+    ],
+    "rank": 1,
+    "crowding_distance": 0.3886066986417612
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        2,
+        4,
+        1
+      ],
+      "arch_id": 14617,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|nor_conv_1x1~0|avg_pool_3x3~1|skip_connect~2|"
+    },
+    "objectives": [
+      63.74,
+      28.90082155642918
+    ],
+    "rank": 7,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        2,
+        1,
+        0,
+        4,
+        3,
+        4
+      ],
+      "arch_id": 8935,
+      "architecture_details": "|nor_conv_1x1~0|+|skip_connect~0|none~1|+|avg_pool_3x3~0|nor_conv_3x3~1|avg_pool_3x3~2|"
+    },
+    "objectives": [
+      63.2,
+      40.084867681856025
+    ],
+    "rank": 2,
+    "crowding_distance": 0.6410797329946966
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        1,
+        1,
+        1,
+        1,
+        2
+      ],
+      "arch_id": 1424,
+      "architecture_details": "|nor_conv_3x3~0|+|skip_connect~0|skip_connect~1|+|skip_connect~0|skip_connect~1|nor_conv_1x1~2|"
+    },
+    "objectives": [
+      67.94,
+      42.45990617209934
+    ],
+    "rank": 1,
+    "crowding_distance": 0.48003818455899405
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        0,
+        4,
+        4,
+        2,
+        1
+      ],
+      "arch_id": 9674,
+      "architecture_details": "|nor_conv_3x3~0|+|none~0|avg_pool_3x3~1|+|avg_pool_3x3~0|nor_conv_1x1~1|skip_connect~2|"
+    },
+    "objectives": [
+      65.48,
+      33.690947580979014
+    ],
+    "rank": 3,
+    "crowding_distance": 0.6568236587561159
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        2,
+        2,
+        4,
+        1
+      ],
+      "arch_id": 6912,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|nor_conv_1x1~1|+|nor_conv_1x1~0|avg_pool_3x3~1|skip_connect~2|"
+    },
+    "objectives": [
+      63.873333,
+      30.795319142285692
+    ],
+    "rank": 6,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        2,
+        2,
+        3,
+        2,
+        4,
+        1
+      ],
+      "arch_id": 520,
+      "architecture_details": "|nor_conv_1x1~0|+|nor_conv_1x1~0|nor_conv_3x3~1|+|nor_conv_1x1~0|avg_pool_3x3~1|skip_connect~2|"
+    },
+    "objectives": [
+      68.78,
+      26.78389262230312
+    ],
+    "rank": 3,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 488,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.21333,
+      59.65274822895464
+    ],
+    "rank": 0,
+    "crowding_distance": 1.2039955323050757
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        4,
+        4,
+        4,
+        0
+      ],
+      "arch_id": 1535,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|avg_pool_3x3~1|+|avg_pool_3x3~0|avg_pool_3x3~1|none~2|"
+    },
+    "objectives": [
+      62.133335,
+      49.16774979122143
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        4,
+        2,
+        4,
+        4,
+        2
+      ],
+      "arch_id": 3582,
+      "architecture_details": "|nor_conv_3x3~0|+|avg_pool_3x3~0|nor_conv_1x1~1|+|avg_pool_3x3~0|avg_pool_3x3~1|nor_conv_1x1~2|"
+    },
+    "objectives": [
+      64.08667,
+      31.831120372835365
+    ],
+    "rank": 5,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        0
+      ],
+      "arch_id": 3811,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|none~2|"
+    },
+    "objectives": [
+      69.36,
+      58.83645612727267
+    ],
+    "rank": 0,
+    "crowding_distance": 0.9638555157287647
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        1,
+        0,
+        0,
+        1
+      ],
+      "arch_id": 8279,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|skip_connect~1|+|none~0|none~1|skip_connect~2|"
+    },
+    "objectives": [
+      66.98,
+      37.68663599853851
+    ],
+    "rank": 2,
+    "crowding_distance": 0.4513190110813749
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        0,
+        4,
+        2,
+        0,
+        3
+      ],
+      "arch_id": 9863,
+      "architecture_details": "|nor_conv_3x3~0|+|none~0|avg_pool_3x3~1|+|nor_conv_1x1~0|none~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      69.06,
+      35.10350787072424
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        1,
+        1,
+        3,
+        4
+      ],
+      "arch_id": 434,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|skip_connect~1|+|skip_connect~0|nor_conv_3x3~1|avg_pool_3x3~2|"
+    },
+    "objectives": [
+      56.006668,
+      32.59585217781037
+    ],
+    "rank": 5,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        2,
+        2,
+        4,
+        2,
+        4
+      ],
+      "arch_id": 9195,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_1x1~0|nor_conv_1x1~1|+|avg_pool_3x3~0|nor_conv_1x1~1|avg_pool_3x3~2|"
+    },
+    "objectives": [
+      60.0,
+      29.076106709311624
+    ],
+    "rank": 7,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        4,
+        3,
+        2,
+        1,
+        4
+      ],
+      "arch_id": 3257,
+      "architecture_details": "|none~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|skip_connect~1|avg_pool_3x3~2|"
+    },
+    "objectives": [
+      62.22,
+      31.605652481312365
+    ],
+    "rank": 6,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        2,
+        4,
+        2,
+        0,
+        4,
+        3
+      ],
+      "arch_id": 11731,
+      "architecture_details": "|nor_conv_1x1~0|+|avg_pool_3x3~0|nor_conv_1x1~1|+|none~0|avg_pool_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      66.54,
+      32.70144869052771
+    ],
+    "rank": 4,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        2,
+        3,
+        1,
+        4,
+        2
+      ],
+      "arch_id": 10647,
+      "architecture_details": "|none~0|+|nor_conv_1x1~0|nor_conv_3x3~1|+|skip_connect~0|avg_pool_3x3~1|nor_conv_1x1~2|"
+    },
+    "objectives": [
+      66.72,
+      33.13358201191086
+    ],
+    "rank": 3,
+    "crowding_distance": 0.4444759025627849
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        4,
+        0,
+        4,
+        2
+      ],
+      "arch_id": 11490,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|avg_pool_3x3~1|+|none~0|avg_pool_3x3~1|nor_conv_1x1~2|"
+    },
+    "objectives": [
+      61.62,
+      35.16442710291186
+    ],
+    "rank": 3,
+    "crowding_distance": 1.1192229330413488
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        0,
+        4,
+        0,
+        1,
+        3
+      ],
+      "arch_id": 8928,
+      "architecture_details": "|avg_pool_3x3~0|+|none~0|avg_pool_3x3~1|+|none~0|skip_connect~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      54.72,
+      46.39942761666092
+    ],
+    "rank": 2,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        4,
+        1,
+        1,
+        1
+      ],
+      "arch_id": 6873,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|avg_pool_3x3~1|+|skip_connect~0|skip_connect~1|skip_connect~2|"
+    },
+    "objectives": [
+      67.54,
+      34.010609269455514
+    ],
+    "rank": 2,
+    "crowding_distance": 0.665436695736483
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        4,
+        3,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 9067,
+      "architecture_details": "|none~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      61.92,
+      100.20891052621954
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        0
+      ],
+      "arch_id": 3811,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|none~2|"
+    },
+    "objectives": [
+      69.36,
+      58.83645612727267
+    ],
+    "rank": 0,
+    "crowding_distance": 0.8853291760607884
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 488,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.21333,
+      59.65274822895464
+    ],
+    "rank": 0,
+    "crowding_distance": 0.5147461684485833
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 488,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.21333,
+      59.65274822895464
+    ],
+    "rank": 0,
+    "crowding_distance": 0.5999246554906282
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        3,
+        2,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 13599,
+      "architecture_details": "|skip_connect~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.246666,
+      58.93102827366356
+    ],
+    "rank": 0,
+    "crowding_distance": 0.21645581323405516
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        3
+      ],
+      "arch_id": 10165,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.28,
+      29.03181088097756
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        4,
+        1,
+        0,
+        1,
+        0
+      ],
+      "arch_id": 2286,
+      "architecture_details": "|skip_connect~0|+|avg_pool_3x3~0|skip_connect~1|+|none~0|skip_connect~1|none~2|"
+    },
+    "objectives": [
+      58.106667,
+      77.91614819963053
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        4,
+        4,
+        4,
+        0
+      ],
+      "arch_id": 1535,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|avg_pool_3x3~1|+|avg_pool_3x3~0|avg_pool_3x3~1|none~2|"
+    },
+    "objectives": [
+      62.133335,
+      49.16774979122143
+    ],
+    "rank": 1,
+    "crowding_distance": 1.322379572224425
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        1,
+        1,
+        1,
+        1,
+        3
+      ],
+      "arch_id": 14374,
+      "architecture_details": "|nor_conv_3x3~0|+|skip_connect~0|skip_connect~1|+|skip_connect~0|skip_connect~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      67.04,
+      44.08388722900808
+    ],
+    "rank": 1,
+    "crowding_distance": 0.5469081172070687
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        0,
+        4,
+        2,
+        0,
+        3
+      ],
+      "arch_id": 9863,
+      "architecture_details": "|nor_conv_3x3~0|+|none~0|avg_pool_3x3~1|+|nor_conv_1x1~0|none~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      69.06,
+      35.10350787072424
+    ],
+    "rank": 1,
+    "crowding_distance": 0.14254967461194143
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        1,
+        1,
+        1,
+        1,
+        2
+      ],
+      "arch_id": 1424,
+      "architecture_details": "|nor_conv_3x3~0|+|skip_connect~0|skip_connect~1|+|skip_connect~0|skip_connect~1|nor_conv_1x1~2|"
+    },
+    "objectives": [
+      67.94,
+      42.45990617209934
+    ],
+    "rank": 1,
+    "crowding_distance": 0.14731692673474833
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        0,
+        4,
+        2,
+        0,
+        3
+      ],
+      "arch_id": 9863,
+      "architecture_details": "|nor_conv_3x3~0|+|none~0|avg_pool_3x3~1|+|nor_conv_1x1~0|none~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      69.06,
+      35.10350787072424
+    ],
+    "rank": 1,
+    "crowding_distance": 0.24192178594278835
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        0,
+        2,
+        4,
+        0,
+        3
+      ],
+      "arch_id": 1679,
+      "architecture_details": "|nor_conv_3x3~0|+|none~0|nor_conv_1x1~1|+|avg_pool_3x3~0|none~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      67.973335,
+      38.36254833201558
+    ],
+    "rank": 1,
+    "crowding_distance": 0.0173282645633612
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        1,
+        2,
+        1,
+        1,
+        2
+      ],
+      "arch_id": 12404,
+      "architecture_details": "|nor_conv_3x3~0|+|skip_connect~0|nor_conv_1x1~1|+|skip_connect~0|skip_connect~1|nor_conv_1x1~2|"
+    },
+    "objectives": [
+      68.62,
+      37.63044122068636
+    ],
+    "rank": 1,
+    "crowding_distance": 0.11025920118776827
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        2,
+        1,
+        2,
+        0,
+        3
+      ],
+      "arch_id": 12135,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_1x1~0|skip_connect~1|+|nor_conv_1x1~0|none~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      68.8,
+      35.82379778469216
+    ],
+    "rank": 1,
+    "crowding_distance": 0.08273630083350833
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        1,
+        1,
+        1,
+        1,
+        2
+      ],
+      "arch_id": 1424,
+      "architecture_details": "|nor_conv_3x3~0|+|skip_connect~0|skip_connect~1|+|skip_connect~0|skip_connect~1|nor_conv_1x1~2|"
+    },
+    "objectives": [
+      67.94,
+      42.45990617209934
+    ],
+    "rank": 1,
+    "crowding_distance": 0.035572839298328586
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        0,
+        2,
+        4,
+        0,
+        3
+      ],
+      "arch_id": 1679,
+      "architecture_details": "|nor_conv_3x3~0|+|none~0|nor_conv_1x1~1|+|avg_pool_3x3~0|none~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      67.973335,
+      38.36254833201558
+    ],
+    "rank": 1,
+    "crowding_distance": 0.1294428670481529
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        0,
+        3,
+        2,
+        2,
+        3
+      ],
+      "arch_id": 6189,
+      "architecture_details": "|nor_conv_3x3~0|+|none~0|nor_conv_3x3~1|+|nor_conv_1x1~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      70.22,
+      26.020724726623012
+    ],
+    "rank": 2,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        3,
+        0,
+        4,
+        1,
+        0
+      ],
+      "arch_id": 7920,
+      "architecture_details": "|none~0|+|nor_conv_3x3~0|none~1|+|avg_pool_3x3~0|skip_connect~1|none~2|"
+    },
+    "objectives": [
+      47.0,
+      73.11225794998931
+    ],
+    "rank": 2,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        0,
+        4,
+        0,
+        1,
+        3
+      ],
+      "arch_id": 8928,
+      "architecture_details": "|avg_pool_3x3~0|+|none~0|avg_pool_3x3~1|+|none~0|skip_connect~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      54.72,
+      46.39942761666092
+    ],
+    "rank": 2,
+    "crowding_distance": 1.1534080402530003
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        4,
+        0,
+        1,
+        1,
+        1
+      ],
+      "arch_id": 3657,
+      "architecture_details": "|nor_conv_3x3~0|+|avg_pool_3x3~0|none~1|+|skip_connect~0|skip_connect~1|skip_connect~2|"
+    },
+    "objectives": [
+      59.01,
+      43.153495169872436
+    ],
+    "rank": 2,
+    "crowding_distance": 0.18940346702182836
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        2,
+        3,
+        2,
+        3,
+        4,
+        0
+      ],
+      "arch_id": 11087,
+      "architecture_details": "|nor_conv_1x1~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|nor_conv_3x3~0|avg_pool_3x3~1|none~2|"
+    },
+    "objectives": [
+      66.9,
+      42.93456921921983
+    ],
+    "rank": 2,
+    "crowding_distance": 0.35755529807218595
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        2,
+        2,
+        3,
+        3,
+        1
+      ],
+      "arch_id": 1824,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_1x1~0|nor_conv_1x1~1|+|nor_conv_3x3~0|nor_conv_3x3~1|skip_connect~2|"
+    },
+    "objectives": [
+      68.793335,
+      27.598045506417236
+    ],
+    "rank": 2,
+    "crowding_distance": 0.2850848574731291
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        4,
+        0,
+        1,
+        1,
+        1
+      ],
+      "arch_id": 3657,
+      "architecture_details": "|nor_conv_3x3~0|+|avg_pool_3x3~0|none~1|+|skip_connect~0|skip_connect~1|skip_connect~2|"
+    },
+    "objectives": [
+      59.01,
+      43.153495169872436
+    ],
+    "rank": 2,
+    "crowding_distance": 0.40872143549813905
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        4,
+        1,
+        1,
+        1
+      ],
+      "arch_id": 6873,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|avg_pool_3x3~1|+|skip_connect~0|skip_connect~1|skip_connect~2|"
+    },
+    "objectives": [
+      67.54,
+      34.010609269455514
+    ],
+    "rank": 2,
+    "crowding_distance": 0.16028946956251644
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        4,
+        1,
+        1,
+        1
+      ],
+      "arch_id": 6873,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|avg_pool_3x3~1|+|skip_connect~0|skip_connect~1|skip_connect~2|"
+    },
+    "objectives": [
+      67.54,
+      34.010609269455514
+    ],
+    "rank": 2,
+    "crowding_distance": 0.1320378379149567
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        1,
+        0,
+        0,
+        1
+      ],
+      "arch_id": 8279,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|skip_connect~1|+|none~0|none~1|skip_connect~2|"
+    },
+    "objectives": [
+      66.98,
+      37.68663599853851
+    ],
+    "rank": 2,
+    "crowding_distance": 0.07892263550324342
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        2,
+        0,
+        3,
+        4,
+        0
+      ],
+      "arch_id": 13857,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|avg_pool_3x3~1|none~2|"
+    },
+    "objectives": [
+      66.96,
+      42.09812863293694
+    ],
+    "rank": 2,
+    "crowding_distance": 0.11488642610538816
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        1,
+        0,
+        0,
+        1
+      ],
+      "arch_id": 8279,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|skip_connect~1|+|none~0|none~1|skip_connect~2|"
+    },
+    "objectives": [
+      66.98,
+      37.68663599853851
+    ],
+    "rank": 2,
+    "crowding_distance": 0.11779624431227248
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        2,
+        3,
+        2,
+        3,
+        4,
+        0
+      ],
+      "arch_id": 11087,
+      "architecture_details": "|nor_conv_1x1~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|nor_conv_3x3~0|avg_pool_3x3~1|none~2|"
+    },
+    "objectives": [
+      66.9,
+      42.93456921921983
+    ],
+    "rank": 2,
+    "crowding_distance": 0.007232924386168952
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        4,
+        3,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 15405,
+      "architecture_details": "|skip_connect~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      61.84667,
+      108.04576278282667
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        3,
+        0,
+        1,
+        3,
+        0
+      ],
+      "arch_id": 2805,
+      "architecture_details": "|skip_connect~0|+|nor_conv_3x3~0|none~1|+|skip_connect~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      66.986664,
+      74.78944061350079
+    ],
+    "rank": 0,
+    "crowding_distance": 1.0356819248615032
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        4,
+        3,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 9067,
+      "architecture_details": "|none~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      61.92,
+      100.20891052621954
+    ],
+    "rank": 0,
+    "crowding_distance": 0.9248740447903114
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        0
+      ],
+      "arch_id": 3811,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|none~2|"
+    },
+    "objectives": [
+      69.36,
+      58.83645612727267
+    ],
+    "rank": 0,
+    "crowding_distance": 0.5506627792768658
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        0
+      ],
+      "arch_id": 3811,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|none~2|"
+    },
+    "objectives": [
+      69.36,
+      58.83645612727267
+    ],
+    "rank": 0,
+    "crowding_distance": 0.29065508184236016
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        3,
+        2,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 13599,
+      "architecture_details": "|skip_connect~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.246666,
+      58.93102827366356
+    ],
+    "rank": 0,
+    "crowding_distance": 0.21379608424865823
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 488,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.21333,
+      59.65274822895464
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0309590691837463
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 488,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.21333,
+      59.65274822895464
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 488,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.21333,
+      59.65274822895464
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 488,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.21333,
+      59.65274822895464
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 488,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.21333,
+      59.65274822895464
+    ],
+    "rank": 0,
+    "crowding_distance": 0.20284902490671622
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        3
+      ],
+      "arch_id": 10165,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.28,
+      29.03181088097756
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        3
+      ],
+      "arch_id": 10165,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.28,
+      29.03181088097756
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        4,
+        1,
+        0,
+        1,
+        0
+      ],
+      "arch_id": 2286,
+      "architecture_details": "|skip_connect~0|+|avg_pool_3x3~0|skip_connect~1|+|none~0|skip_connect~1|none~2|"
+    },
+    "objectives": [
+      58.106667,
+      77.91614819963053
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        4,
+        1,
+        0,
+        1,
+        0
+      ],
+      "arch_id": 2286,
+      "architecture_details": "|skip_connect~0|+|avg_pool_3x3~0|skip_connect~1|+|none~0|skip_connect~1|none~2|"
+    },
+    "objectives": [
+      58.106667,
+      77.91614819963053
+    ],
+    "rank": 1,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        2,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 9375,
+      "architecture_details": "|nor_conv_1x1~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      69.15,
+      45.90666770476945
+    ],
+    "rank": 1,
+    "crowding_distance": 1.1206289517495063
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        4,
+        4,
+        4,
+        0
+      ],
+      "arch_id": 1535,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|avg_pool_3x3~1|+|avg_pool_3x3~0|avg_pool_3x3~1|none~2|"
+    },
+    "objectives": [
+      62.133335,
+      49.16774979122143
+    ],
+    "rank": 1,
+    "crowding_distance": 0.35081186250688884
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        3,
+        2
+      ],
+      "arch_id": 13390,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_1x1~2|"
+    },
+    "objectives": [
+      72.2,
+      29.106837198968723
+    ],
+    "rank": 1,
+    "crowding_distance": 0.5660369223846963
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        4,
+        4,
+        4,
+        0
+      ],
+      "arch_id": 1535,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|avg_pool_3x3~1|+|avg_pool_3x3~0|avg_pool_3x3~1|none~2|"
+    },
+    "objectives": [
+      62.133335,
+      49.16774979122143
+    ],
+    "rank": 1,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        4,
+        4,
+        4,
+        0
+      ],
+      "arch_id": 1535,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|avg_pool_3x3~1|+|avg_pool_3x3~0|avg_pool_3x3~1|none~2|"
+    },
+    "objectives": [
+      62.133335,
+      49.16774979122143
+    ],
+    "rank": 1,
+    "crowding_distance": 1.0831512151084148
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        4,
+        1,
+        0,
+        1,
+        0
+      ],
+      "arch_id": 2286,
+      "architecture_details": "|skip_connect~0|+|avg_pool_3x3~0|skip_connect~1|+|none~0|skip_connect~1|none~2|"
+    },
+    "objectives": [
+      58.106667,
+      77.91614819963053
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        0,
+        3,
+        2,
+        2,
+        3
+      ],
+      "arch_id": 6189,
+      "architecture_details": "|nor_conv_3x3~0|+|none~0|nor_conv_3x3~1|+|nor_conv_1x1~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      70.22,
+      26.020724726623012
+    ],
+    "rank": 2,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        1,
+        3,
+        4,
+        1,
+        0
+      ],
+      "arch_id": 3387,
+      "architecture_details": "|none~0|+|skip_connect~0|nor_conv_3x3~1|+|avg_pool_3x3~0|skip_connect~1|none~2|"
+    },
+    "objectives": [
+      47.1,
+      73.37086057195961
+    ],
+    "rank": 2,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        0,
+        4,
+        0,
+        1,
+        3
+      ],
+      "arch_id": 8928,
+      "architecture_details": "|avg_pool_3x3~0|+|none~0|avg_pool_3x3~1|+|none~0|skip_connect~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      54.72,
+      46.39942761666092
+    ],
+    "rank": 2,
+    "crowding_distance": 0.3784872828895719
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        1,
+        1,
+        1,
+        1,
+        3
+      ],
+      "arch_id": 14374,
+      "architecture_details": "|nor_conv_3x3~0|+|skip_connect~0|skip_connect~1|+|skip_connect~0|skip_connect~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      67.04,
+      44.08388722900808
+    ],
+    "rank": 2,
+    "crowding_distance": 0.6673225052320254
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        0,
+        4,
+        0,
+        1,
+        3
+      ],
+      "arch_id": 8928,
+      "architecture_details": "|avg_pool_3x3~0|+|none~0|avg_pool_3x3~1|+|none~0|skip_connect~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      54.72,
+      46.39942761666092
+    ],
+    "rank": 2,
+    "crowding_distance": 1.1024887743354985
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        0,
+        4,
+        2,
+        0,
+        3
+      ],
+      "arch_id": 9863,
+      "architecture_details": "|nor_conv_3x3~0|+|none~0|avg_pool_3x3~1|+|nor_conv_1x1~0|none~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      69.06,
+      35.10350787072424
+    ],
+    "rank": 2,
+    "crowding_distance": 0.31439281510714756
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        0,
+        0,
+        3,
+        3,
+        3
+      ],
+      "arch_id": 6573,
+      "architecture_details": "|skip_connect~0|+|none~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      67.98,
+      41.958311899629
+    ],
+    "rank": 2,
+    "crowding_distance": 0.2046311276677819
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        1,
+        2,
+        1,
+        1,
+        2
+      ],
+      "arch_id": 12404,
+      "architecture_details": "|nor_conv_3x3~0|+|skip_connect~0|nor_conv_1x1~1|+|skip_connect~0|skip_connect~1|nor_conv_1x1~2|"
+    },
+    "objectives": [
+      68.62,
+      37.63044122068636
+    ],
+    "rank": 2,
+    "crowding_distance": 0.1914812159210899
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        4,
+        3,
+        4,
+        0,
+        0
+      ],
+      "arch_id": 3283,
+      "architecture_details": "|skip_connect~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|avg_pool_3x3~0|none~1|none~2|"
+    },
+    "objectives": [
+      46.746666,
+      111.73071378440251
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        4,
+        3,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 6974,
+      "architecture_details": "|avg_pool_3x3~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      61.88,
+      111.07208161576557
+    ],
+    "rank": 0,
+    "crowding_distance": 0.7359736576050933
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        4,
+        3,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 9067,
+      "architecture_details": "|none~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      61.92,
+      100.20891052621954
+    ],
+    "rank": 0,
+    "crowding_distance": 0.6553891056076917
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        2,
+        2,
+        1,
+        3,
+        0
+      ],
+      "arch_id": 8253,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_1x1~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      70.09333,
+      58.78895631818876
+    ],
+    "rank": 0,
+    "crowding_distance": 0.45371559564413655
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        3,
+        0,
+        1,
+        3,
+        0
+      ],
+      "arch_id": 2805,
+      "architecture_details": "|skip_connect~0|+|nor_conv_3x3~0|none~1|+|skip_connect~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      66.986664,
+      74.78944061350079
+    ],
+    "rank": 0,
+    "crowding_distance": 0.34848530098639124
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        3,
+        0,
+        1,
+        3,
+        0
+      ],
+      "arch_id": 2805,
+      "architecture_details": "|skip_connect~0|+|nor_conv_3x3~0|none~1|+|skip_connect~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      66.986664,
+      74.78944061350079
+    ],
+    "rank": 0,
+    "crowding_distance": 0.33590772731358837
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        2,
+        0,
+        3,
+        4,
+        0
+      ],
+      "arch_id": 12858,
+      "architecture_details": "|none~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|avg_pool_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.4,
+      62.77676707182792
+    ],
+    "rank": 0,
+    "crowding_distance": 0.29315160892696146
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        0
+      ],
+      "arch_id": 3811,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|none~2|"
+    },
+    "objectives": [
+      69.36,
+      58.83645612727267
+    ],
+    "rank": 0,
+    "crowding_distance": 0.07694141030595748
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        0
+      ],
+      "arch_id": 3811,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|none~2|"
+    },
+    "objectives": [
+      69.36,
+      58.83645612727267
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        0
+      ],
+      "arch_id": 3811,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|none~2|"
+    },
+    "objectives": [
+      69.36,
+      58.83645612727267
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        0
+      ],
+      "arch_id": 3811,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|none~2|"
+    },
+    "objectives": [
+      69.36,
+      58.83645612727267
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        0
+      ],
+      "arch_id": 3811,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|none~2|"
+    },
+    "objectives": [
+      69.36,
+      58.83645612727267
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        0
+      ],
+      "arch_id": 3811,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|none~2|"
+    },
+    "objectives": [
+      69.36,
+      58.83645612727267
+    ],
+    "rank": 0,
+    "crowding_distance": 0.07813779239989299
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        3
+      ],
+      "arch_id": 10165,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.28,
+      29.03181088097756
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        3
+      ],
+      "arch_id": 10165,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.28,
+      29.03181088097756
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        4,
+        3,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 15405,
+      "architecture_details": "|skip_connect~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      61.84667,
+      108.04576278282667
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        4,
+        3,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 15405,
+      "architecture_details": "|skip_connect~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      61.84667,
+      108.04576278282667
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 488,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.21333,
+      59.65274822895464
+    ],
+    "rank": 1,
+    "crowding_distance": 0.5235106046646248
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 488,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.21333,
+      59.65274822895464
+    ],
+    "rank": 1,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        3,
+        2,
+        1,
+        2,
+        3
+      ],
+      "arch_id": 12663,
+      "architecture_details": "|none~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      69.8,
+      30.45616296751695
+    ],
+    "rank": 1,
+    "crowding_distance": 0.4715438808498647
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        3,
+        2,
+        0
+      ],
+      "arch_id": 2275,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_1x1~1|none~2|"
+    },
+    "objectives": [
+      67.753334,
+      57.68855460807232
+    ],
+    "rank": 1,
+    "crowding_distance": 0.34726444973214843
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        2,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 9375,
+      "architecture_details": "|nor_conv_1x1~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      69.15,
+      45.90666770476945
+    ],
+    "rank": 1,
+    "crowding_distance": 0.32940726903290884
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        2,
+        3,
+        2,
+        1,
+        2,
+        3
+      ],
+      "arch_id": 11307,
+      "architecture_details": "|nor_conv_1x1~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      71.88,
+      29.323025468836324
+    ],
+    "rank": 1,
+    "crowding_distance": 0.241845511905485
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        2,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 9375,
+      "architecture_details": "|nor_conv_1x1~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      69.15,
+      45.90666770476945
+    ],
+    "rank": 1,
+    "crowding_distance": 0.21141181426195138
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        3,
+        2,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 13599,
+      "architecture_details": "|skip_connect~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.246666,
+      58.93102827366356
+    ],
+    "rank": 1,
+    "crowding_distance": 0.07661640858631248
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        2,
+        2,
+        1,
+        3,
+        2
+      ],
+      "arch_id": 4208,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_1x1~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_1x1~2|"
+    },
+    "objectives": [
+      72.16,
+      29.2198034880556
+    ],
+    "rank": 1,
+    "crowding_distance": 0.03340701348605557
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        3,
+        2
+      ],
+      "arch_id": 13390,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_1x1~2|"
+    },
+    "objectives": [
+      72.2,
+      29.106837198968723
+    ],
+    "rank": 1,
+    "crowding_distance": 0.013880834185201588
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 488,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.21333,
+      59.65274822895464
+    ],
+    "rank": 1,
+    "crowding_distance": 0.6156567846538995
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        0,
+        1,
+        1,
+        0,
+        0
+      ],
+      "arch_id": 7594,
+      "architecture_details": "|skip_connect~0|+|none~0|skip_connect~1|+|skip_connect~0|none~1|none~2|"
+    },
+    "objectives": [
+      58.3,
+      136.86257198030358
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        4,
+        2,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 13320,
+      "architecture_details": "|none~0|+|avg_pool_3x3~0|nor_conv_1x1~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      63.04,
+      106.33674486422765
+    ],
+    "rank": 0,
+    "crowding_distance": 0.6647449437278083
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        2,
+        0,
+        1,
+        3,
+        0
+      ],
+      "arch_id": 2776,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_1x1~0|none~1|+|skip_connect~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      70.73333,
+      59.43045065338135
+    ],
+    "rank": 0,
+    "crowding_distance": 0.6473511450087182
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        4,
+        3,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 7174,
+      "architecture_details": "|nor_conv_3x3~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      62.6,
+      111.83111086707078
+    ],
+    "rank": 0,
+    "crowding_distance": 0.6274849627293142
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        2,
+        0,
+        3,
+        4,
+        0
+      ],
+      "arch_id": 12858,
+      "architecture_details": "|none~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|avg_pool_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.4,
+      62.77676707182792
+    ],
+    "rank": 0,
+    "crowding_distance": 0.412158450545024
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        3,
+        0,
+        1,
+        3,
+        0
+      ],
+      "arch_id": 2805,
+      "architecture_details": "|skip_connect~0|+|nor_conv_3x3~0|none~1|+|skip_connect~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      66.986664,
+      74.78944061350079
+    ],
+    "rank": 0,
+    "crowding_distance": 0.3943357758051773
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        3,
+        0,
+        1,
+        3,
+        0
+      ],
+      "arch_id": 2805,
+      "architecture_details": "|skip_connect~0|+|nor_conv_3x3~0|none~1|+|skip_connect~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      66.986664,
+      74.78944061350079
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        3,
+        0,
+        1,
+        3,
+        0
+      ],
+      "arch_id": 2805,
+      "architecture_details": "|skip_connect~0|+|nor_conv_3x3~0|none~1|+|skip_connect~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      66.986664,
+      74.78944061350079
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        3,
+        0,
+        1,
+        3,
+        0
+      ],
+      "arch_id": 2805,
+      "architecture_details": "|skip_connect~0|+|nor_conv_3x3~0|none~1|+|skip_connect~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      66.986664,
+      74.78944061350079
+    ],
+    "rank": 0,
+    "crowding_distance": 0.33082811645679044
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        3
+      ],
+      "arch_id": 10165,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.28,
+      29.03181088097756
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        3
+      ],
+      "arch_id": 10165,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.28,
+      29.03181088097756
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        4,
+        3,
+        4,
+        0,
+        0
+      ],
+      "arch_id": 10602,
+      "architecture_details": "|avg_pool_3x3~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|avg_pool_3x3~0|none~1|none~2|"
+    },
+    "objectives": [
+      46.55,
+      113.42394507649622
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        4,
+        3,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 6974,
+      "architecture_details": "|avg_pool_3x3~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      61.88,
+      111.07208161576557
+    ],
+    "rank": 1,
+    "crowding_distance": 0.7262406998761431
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        2,
+        2,
+        0,
+        3,
+        0
+      ],
+      "arch_id": 11247,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_1x1~0|nor_conv_1x1~1|+|none~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      63.78,
+      63.95374455889535
+    ],
+    "rank": 1,
+    "crowding_distance": 0.6862940381171911
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        4,
+        3,
+        4,
+        0,
+        0
+      ],
+      "arch_id": 3283,
+      "architecture_details": "|skip_connect~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|avg_pool_3x3~0|none~1|none~2|"
+    },
+    "objectives": [
+      46.746666,
+      111.73071378440251
+    ],
+    "rank": 1,
+    "crowding_distance": 0.6236708431459902
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        4,
+        3,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 9067,
+      "architecture_details": "|none~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      61.92,
+      100.20891052621954
+    ],
+    "rank": 1,
+    "crowding_distance": 0.43115822098529416
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        4,
+        2,
+        1,
+        2,
+        3
+      ],
+      "arch_id": 15485,
+      "architecture_details": "|nor_conv_3x3~0|+|avg_pool_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      71.04,
+      31.476314702712504
+    ],
+    "rank": 1,
+    "crowding_distance": 0.4185941195883633
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        2,
+        2,
+        1,
+        3,
+        0
+      ],
+      "arch_id": 8253,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_1x1~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      70.09333,
+      58.78895631818876
+    ],
+    "rank": 1,
+    "crowding_distance": 0.38949593816712946
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        4,
+        3,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 9067,
+      "architecture_details": "|none~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      61.92,
+      100.20891052621954
+    ],
+    "rank": 1,
+    "crowding_distance": 0.20101171108138405
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 488,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.21333,
+      59.65274822895464
+    ],
+    "rank": 1,
+    "crowding_distance": 0.1419888254719351
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        1,
+        2,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 10884,
+      "architecture_details": "|skip_connect~0|+|skip_connect~0|nor_conv_1x1~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.99,
+      58.928875175353916
+    ],
+    "rank": 1,
+    "crowding_distance": 0.0832556449896401
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        2,
+        3,
+        2,
+        1,
+        2,
+        3
+      ],
+      "arch_id": 11307,
+      "architecture_details": "|nor_conv_1x1~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      71.88,
+      29.323025468836324
+    ],
+    "rank": 1,
+    "crowding_distance": 0.07715878604577357
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        0
+      ],
+      "arch_id": 3811,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|none~2|"
+    },
+    "objectives": [
+      69.36,
+      58.83645612727267
+    ],
+    "rank": 1,
+    "crowding_distance": 0.08340417153010565
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 488,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.21333,
+      59.65274822895464
+    ],
+    "rank": 1,
+    "crowding_distance": 0.05226003011285342
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        3,
+        2,
+        3,
+        3,
+        0
+      ],
+      "arch_id": 13599,
+      "architecture_details": "|skip_connect~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|nor_conv_3x3~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.246666,
+      58.93102827366356
+    ],
+    "rank": 1,
+    "crowding_distance": 0.03876288105047056
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        0,
+        1,
+        1,
+        0,
+        0
+      ],
+      "arch_id": 7594,
+      "architecture_details": "|skip_connect~0|+|none~0|skip_connect~1|+|skip_connect~0|none~1|none~2|"
+    },
+    "objectives": [
+      58.3,
+      136.86257198030358
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        0,
+        1,
+        1,
+        0,
+        0
+      ],
+      "arch_id": 7594,
+      "architecture_details": "|skip_connect~0|+|none~0|skip_connect~1|+|skip_connect~0|none~1|none~2|"
+    },
+    "objectives": [
+      58.3,
+      136.86257198030358
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        2,
+        0,
+        1,
+        3,
+        0
+      ],
+      "arch_id": 13413,
+      "architecture_details": "|skip_connect~0|+|nor_conv_1x1~0|none~1|+|skip_connect~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.30666,
+      80.82257988907908
+    ],
+    "rank": 0,
+    "crowding_distance": 0.7251638922619678
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        2,
+        0,
+        3,
+        4,
+        0
+      ],
+      "arch_id": 12858,
+      "architecture_details": "|none~0|+|nor_conv_1x1~0|none~1|+|nor_conv_3x3~0|avg_pool_3x3~1|none~2|"
+    },
+    "objectives": [
+      67.4,
+      62.77676707182792
+    ],
+    "rank": 0,
+    "crowding_distance": 0.44716554162078775
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        2,
+        0,
+        1,
+        3,
+        0
+      ],
+      "arch_id": 2776,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_1x1~0|none~1|+|skip_connect~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      70.73333,
+      59.43045065338135
+    ],
+    "rank": 0,
+    "crowding_distance": 0.4011248596612015
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        3,
+        0,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 2510,
+      "architecture_details": "|skip_connect~0|+|nor_conv_3x3~0|none~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      70.753334,
+      45.65785469310126
+    ],
+    "rank": 0,
+    "crowding_distance": 0.3792927762178797
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        4,
+        3,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 7174,
+      "architecture_details": "|nor_conv_3x3~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      62.6,
+      111.83111086707078
+    ],
+    "rank": 0,
+    "crowding_distance": 0.3570522380358906
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        4,
+        2,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 13320,
+      "architecture_details": "|none~0|+|avg_pool_3x3~0|nor_conv_1x1~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      63.04,
+      106.33674486422765
+    ],
+    "rank": 0,
+    "crowding_distance": 0.27504680441785434
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        4,
+        2,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 13320,
+      "architecture_details": "|none~0|+|avg_pool_3x3~0|nor_conv_1x1~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      63.04,
+      106.33674486422765
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        4,
+        3,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 7174,
+      "architecture_details": "|nor_conv_3x3~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      62.6,
+      111.83111086707078
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": 0.0
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        4,
+        3,
+        2,
+        1,
+        3,
+        3
+      ],
+      "arch_id": 10476,
+      "architecture_details": "|avg_pool_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_3x3~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.42,
+      32.2471576952118
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        4,
+        2,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 13320,
+      "architecture_details": "|none~0|+|avg_pool_3x3~0|nor_conv_1x1~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      63.04,
+      106.33674486422765
+    ],
+    "rank": 0,
+    "crowding_distance": 0.3546910482341902
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        4,
+        3,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 7174,
+      "architecture_details": "|nor_conv_3x3~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      62.6,
+      111.83111086707078
+    ],
+    "rank": 0,
+    "crowding_distance": 0.2704327246934236
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        0,
+        1,
+        1,
+        0,
+        0
+      ],
+      "arch_id": 7594,
+      "architecture_details": "|skip_connect~0|+|none~0|skip_connect~1|+|skip_connect~0|none~1|none~2|"
+    },
+    "objectives": [
+      58.3,
+      136.86257198030358
+    ],
+    "rank": 0,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        3
+      ],
+      "arch_id": 10165,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.28,
+      29.03181088097756
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        3,
+        2,
+        1,
+        2,
+        3
+      ],
+      "arch_id": 10165,
+      "architecture_details": "|nor_conv_3x3~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      72.28,
+      29.03181088097756
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        3,
+        2,
+        1,
+        0,
+        0
+      ],
+      "arch_id": 657,
+      "architecture_details": "|skip_connect~0|+|nor_conv_3x3~0|nor_conv_1x1~1|+|skip_connect~0|none~1|none~2|"
+    },
+    "objectives": [
+      58.233334,
+      136.26718397323495
+    ],
+    "rank": 1,
+    "crowding_distance": Infinity
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        1,
+        3,
+        0,
+        1,
+        3,
+        0
+      ],
+      "arch_id": 2805,
+      "architecture_details": "|skip_connect~0|+|nor_conv_3x3~0|none~1|+|skip_connect~0|nor_conv_3x3~1|none~2|"
+    },
+    "objectives": [
+      66.986664,
+      74.78944061350079
+    ],
+    "rank": 1,
+    "crowding_distance": 1.2902151658218761
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        0,
+        4,
+        3,
+        2,
+        0,
+        0
+      ],
+      "arch_id": 9067,
+      "architecture_details": "|none~0|+|avg_pool_3x3~0|nor_conv_3x3~1|+|nor_conv_1x1~0|none~1|none~2|"
+    },
+    "objectives": [
+      61.92,
+      100.20891052621954
+    ],
+    "rank": 1,
+    "crowding_distance": 1.1964579239345887
+  },
+  {
+    "architecture": {
+      "benchmark_genotype": [
+        3,
+        4,
+        2,
+        1,
+        2,
+        3
+      ],
+      "arch_id": 15485,
+      "architecture_details": "|nor_conv_3x3~0|+|avg_pool_3x3~0|nor_conv_1x1~1|+|skip_connect~0|nor_conv_1x1~1|nor_conv_3x3~2|"
+    },
+    "objectives": [
+      71.04,
+      31.476314702712504
+    ],
+    "rank": 1,
+    "crowding_distance": 0.8035420760654113
+  }
+]
