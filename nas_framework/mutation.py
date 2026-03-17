@@ -61,3 +61,5 @@ class ABCNeighborSampler(SinglePointMutation):
     def sample_neighbor(self, individual: Individual) -> Individual:
         """Return a new Individual differing in exactly one operation."""
         return self.mutate(individual)
+
+        
