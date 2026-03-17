@@ -16,7 +16,7 @@ from nas_framework.benchmark_api import CSVBenchmarkAPI
 from nas_framework.evaluator import Evaluator
 from nas_framework.population import Individual, Population
 from nas_framework.search_space import CSVSearchSpace
-from nas_framework.search_strategy import BruteForceParetoSearch
+from nas_framework.search_strategy import SkylineSearch
 
 DEFAULT_DATASETS = ("cifar10", "cifar100", "ImageNet16-120")
 DEFAULT_DEVICES = ("edgegpu", "edgetpu", "eyeriss", "fpga", "pixel3", "raspi4")
@@ -156,7 +156,7 @@ def run_strategy_on_contexts(
                 continue
 
             any_rows = True
-            context_rows.sort(key=lambda r: (-float(r[3]), float(r[4])))
+            context_rows.sort(key=lambda r: (-float(r[4]), float(r[5])))
             print(f"Pareto Front Rows for dataset={dataset}, device={device}")
             print(
                 _format_table(
@@ -190,9 +190,9 @@ def run_strategy_on_contexts(
         print(f"Total contexts configured: {len(datasets) * len(devices)}")
 
 
-def brute_force_factory() -> StrategyFactory:
-    def _factory(search_space: CSVSearchSpace, evaluator: Evaluator) -> BruteForceParetoSearch:
-        return BruteForceParetoSearch(
+def skyline_factory() -> StrategyFactory:
+    def _factory(search_space: CSVSearchSpace, evaluator: Evaluator) -> SkylineSearch:
+        return SkylineSearch(
             search_space=search_space,
             evaluator=evaluator,
         )
@@ -211,7 +211,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output-csv",
-        default="results/context_runner_pareto.csv",
+        default="results/optimal_pareto_fronts.csv",
         help="Path to output CSV for Pareto rows.",
     )
     parser.add_argument("--seed", type=int, default=None, help="Optional random seed.")
@@ -232,7 +232,7 @@ def main() -> None:
 
     csv_path = _resolve_csv_path(args.csv)
     output_csv = Path(args.output_csv)
-    factory = brute_force_factory()
+    factory = skyline_factory()
 
     run_strategy_on_contexts(
         strategy_factory=factory,

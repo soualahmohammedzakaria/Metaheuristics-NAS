@@ -10,6 +10,7 @@ from nas_framework.termination import Termination, MaxEvaluationsTermination
 from nas_framework.history import History
 from nas_framework.search_space import SearchSpace
 from nas_framework.mo_utils import pareto_front as compute_pareto_front
+from nas_framework.mo_utils import exact_pareto_front_2d
 
 
 class SearchStrategy(ABC):
@@ -210,6 +211,55 @@ class BruteForceParetoSearch:
         self.generations = 1
 
         front = compute_pareto_front(individuals, self.evaluator.objective_directions)
+        self.history.record(
+            generation=0,
+            evaluations=self.evaluations,
+            population=individuals,
+            pareto_front=front,
+        )
+        return front
+
+
+class SkylineSearch:
+    """Exact Pareto strategy for 2 objectives using sort+sweep skyline."""
+
+    def __init__(self, search_space: SearchSpace, evaluator: Evaluator,
+                 history: History | None = None):
+        self.search_space = search_space
+        self.evaluator = evaluator
+        self.history = history or History()
+        self.evaluations: int = 0
+        self.generations: int = 0
+        self.population: list[Individual] = []
+
+    def run(self) -> list[Individual]:
+        if not hasattr(self.search_space, "all_genotypes"):
+            raise TypeError(
+                "SkylineSearch requires a finite search space exposing "
+                "all_genotypes()."
+            )
+        if len(self.evaluator.objective_directions) != 2:
+            raise ValueError("SkylineSearch supports exactly 2 objectives.")
+
+        individuals: list[Individual] = []
+        for genotype in self.search_space.all_genotypes():
+            fitness = self.evaluator.evaluate(genotype)
+            metadata = {}
+            if hasattr(self.search_space, "metadata_from_genotype"):
+                metadata = self.search_space.metadata_from_genotype(genotype)
+            elif hasattr(self.evaluator.benchmark, "get_metadata"):
+                metadata = self.evaluator.benchmark.get_metadata(genotype)
+            individuals.append(Individual(genotype[:], fitness, metadata=metadata))
+
+        self.population = individuals
+        self.evaluations = len(individuals)
+        self.generations = 1
+
+        directions_2d = (
+            self.evaluator.objective_directions[0],
+            self.evaluator.objective_directions[1],
+        )
+        front = exact_pareto_front_2d(individuals, directions_2d)
         self.history.record(
             generation=0,
             evaluations=self.evaluations,
