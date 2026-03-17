@@ -16,7 +16,7 @@ from nas_framework.evaluator import Evaluator
 from nas_framework.mutation import SinglePointMutation
 from nas_framework.population import Population
 from nas_framework.search_space import CSVSearchSpace
-from nas_framework.search_strategy import MOEADStrategy
+from nas_framework.search_strategy import BiPopulationUniformSamplingMOEADStrategy
 
 
 def _resolve_csv_path(raw_csv: str) -> Path:
@@ -41,7 +41,7 @@ def _resolve_csv_path(raw_csv: str) -> Path:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run MOEA/D on NAS/HW merged CSV benchmark."
+        description="Run bi-population MOEA/D with uniform sampling on NAS/HW merged CSV benchmark."
     )
     parser.add_argument(
         "--csv",
@@ -75,7 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_moead(
+def run_bi_population_uniform_sampling_moead(
     csv_path: Path,
     dataset: str,
     device: str,
@@ -91,7 +91,7 @@ def run_moead(
     evaluator = Evaluator(benchmark, dataset=dataset, device=device)
     population = Population(search_space, evaluator, size=pop_size)
 
-    strategy = MOEADStrategy(
+    strategy = BiPopulationUniformSamplingMOEADStrategy(
         population=population,
         crossover=UniformCrossover(),
         mutation=SinglePointMutation(search_space),
@@ -159,7 +159,7 @@ def main() -> None:
 
     csv_path = _resolve_csv_path(args.csv)
 
-    run_moead(
+    run_bi_population_uniform_sampling_moead(
         csv_path=csv_path,
         dataset=args.dataset,
         device=args.device,
