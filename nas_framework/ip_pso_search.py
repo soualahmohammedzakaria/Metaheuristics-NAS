@@ -97,4 +97,40 @@ class IPPSOSearch(SearchStrategy):
         return DecodedIndividual(best_p, layers)
 
     def pareto_front(self):
-        return self.population.get_pareto_front()
+        return self.population.get_pareto_front()
+
+
+class IPRandomSearch(IPPSOSearch):
+    def run(self):
+        """Random search baseline for IP search space."""
+        # Initial evaluation
+        for particle in self.population.particles:
+            particle.current_fitness = self.evaluator.evaluate(particle.position)
+            particle.update_personal_best()
+            self.evaluations += 1
+
+        self.population.update_archive()
+
+        # Target evaluations based on budget
+        total_budget = self.max_generations * self.population.size
+        
+        while self.evaluations < total_budget:
+            for particle in self.population.particles:
+                if self.evaluations >= total_budget:
+                    break
+                    
+                # Sample random valid position
+                particle.position = particle._initialize_position()
+                particle.current_fitness = self.evaluator.evaluate(particle.position)
+                particle.update_personal_best()
+                self.evaluations += 1
+
+            self.generations += 1
+            self.population.update_archive()
+            
+            # Record history
+            front = self.population.get_pareto_front()
+            self.history.record(self.generations, self.evaluations,
+                                self.population.particles, front)
+
+        return self
