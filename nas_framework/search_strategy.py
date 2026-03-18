@@ -405,3 +405,202 @@ class ABCSearchStrategy(SearchStrategy):
 
         self.population.sync_individuals()
         return self.population
+
+
+class FireflySearchStrategy(SearchStrategy):
+    """Improved Firefly Algorithm for NAS (RB-IFA, Nguyen et al., ICAART 2025).
+
+    Each individual (firefly) is attracted to brighter (better rank-scored)
+    neighbours and moves toward them.  Brightness is determined by the
+    rank-based scalar score from mo_utils.rank_based_score, which collapses
+    multiple objectives into one weighted value — no Pareto front needed.
+
+    Movement in the discrete NAS space is modelled as:
+      - With probability proportional to attractiveness β(r): adopt one gene
+        from the brighter firefly (single-gene crossover toward the target).
+      - Otherwise: apply a random mutation (exploration / light absorption).
+
+    When the population stagnates for *max_chances* generations, a genetic
+    iteration (tournament selection + crossover + mutation on the full
+    population) is triggered to escape local optima, mirroring the IFA
+    mechanism of Mokhtari et al. (2022) used in the paper.
+
+    Parameters
+    ----------
+    population : Population
+    selection  : Selection   — used for the genetic fallback iteration.
+    crossover  : Crossover   — used for the genetic fallback iteration.
+    mutation   : Mutation    — used for both movement exploration and fallback.
+    replacement: Replacement — RankBasedReplacement recommended.
+    evaluator  : Evaluator
+    budget     : int         — total evaluation budget.
+    w_perf     : float       — performance weight for rank scoring (0–1).
+    gamma      : float       — light absorption coefficient.
+                              0 → every firefly sees global best (PSO-like).
+                              Large → fireflies ignore distant ones (local search).
+                              Default 1.0 (moderate, balanced).
+    beta0      : float       — base attractiveness at distance 0. Default 1.0.
+    max_chances: int         — stagnation patience before genetic fallback.
+    """
+
+    def __init__(self,
+                 population: Population,
+                 selection: Selection,
+                 crossover: Crossover,
+                 mutation: Mutation,
+                 replacement: Replacement,
+                 evaluator: Evaluator,
+                 budget: int = 500,
+                 w_perf: float = 0.6,
+                 gamma: float = 1.0,
+                 beta0: float = 1.0,
+                 max_chances: int = 5,
+                 termination: Termination | None = None,
+                 history: History | None = None):
+
+        variation = CrossoverMutationVariation(crossover, mutation)
+        super().__init__(
+            population=population,
+            selection=selection,
+            variation=variation,
+            replacement=replacement,
+            evaluator=evaluator,
+            termination=termination,
+            history=history,
+            budget=budget,
+        )
+        self.w_perf     = w_perf
+        self.gamma      = gamma
+        self.beta0      = beta0
+        self.max_chances = max_chances
+        self._mutation  = mutation
+        self._crossover = crossover
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _hamming(self, a: Individual, b: Individual) -> int:
+        """Hamming distance between two genotypes."""
+        return sum(g1 != g2 for g1, g2 in zip(a.genotype, b.genotype))
+
+    def _attractiveness(self, r: int) -> float:
+        """β(r) = β0 * exp(-γ * r²)  — decreases with distance."""
+        import math
+        return self.beta0 * math.exp(-self.gamma * r * r)
+
+    def _move_toward(self, firefly: Individual,
+                     target: Individual) -> Individual:
+        """Move firefly one step toward target.
+
+        With probability β(r) per gene: adopt target's gene value.
+        Remaining genes stay or receive a random mutation with prob α=0.2.
+        This models the FA position update in a discrete space.
+        """
+        import random
+        r   = self._hamming(firefly, target)
+        beta = self._attractiveness(r)
+        alpha = 0.2   # random walk component
+
+        new_geno = list(firefly.genotype)
+        for i, (g_self, g_target) in enumerate(
+                zip(firefly.genotype, target.genotype)):
+            if g_self != g_target and random.random() < beta:
+                new_geno[i] = g_target          # attracted move
+            elif random.random() < alpha:
+                # random walk: re-sample gene
+                n_ops = self.population.search_space.num_ops
+                new_geno[i] = random.randint(0, n_ops - 1)
+        return Individual(new_geno)
+
+    def _scores(self) -> list[float]:
+        from nas_framework.mo_utils import rank_based_score
+        return rank_based_score(
+            self.population.individuals,
+            self.evaluator.objective_directions,
+            self.w_perf,
+        )
+
+    # ------------------------------------------------------------------
+    # Main loop
+    # ------------------------------------------------------------------
+
+    def run(self) -> Population:
+        """Execute the RB-IFA search loop."""
+        import random
+
+        self.population.initialize()
+        self.evaluations = len(self.population)
+        self.generations  = 0
+        self._record_history()
+
+        best_score    = min(self._scores())
+        chances       = self.max_chances
+
+        while not self.termination.should_stop(self.evaluations, self.generations):
+            scores = self._scores()
+            inds   = self.population.individuals
+
+            # ── Firefly movement phase ────────────────────────────────
+            new_inds: list[Individual] = []
+            for i, fi in enumerate(inds):
+                if self.termination.should_stop(self.evaluations, self.generations):
+                    break
+                # Find a brighter firefly (lower score = brighter).
+                brighter = [inds[j] for j, s in enumerate(scores)
+                            if s < scores[i]]
+                if brighter:
+                    target  = random.choice(brighter)
+                    moved   = self._move_toward(fi, target)
+                else:
+                    # Already brightest — random walk only.
+                    moved = self._mutation.mutate(fi)
+
+                moved.fitness = self.evaluator.evaluate(moved.genotype)
+                if hasattr(self.population.search_space, "metadata_from_genotype"):
+                    moved.metadata = (
+                        self.population.search_space
+                        .metadata_from_genotype(moved.genotype)
+                    )
+                self.evaluations += 1
+                new_inds.append(moved)
+
+            # ── Rank-based survivor selection ─────────────────────────
+            self.population.individuals = self.replacement.replace(
+                self.population.individuals,
+                new_inds,
+                self.population.size,
+                self.evaluator.objective_directions,
+            )
+
+            # ── Stagnation check ──────────────────────────────────────
+            current_best = min(self._scores())
+            if current_best < best_score:
+                best_score = current_best
+                chances    = self.max_chances
+            else:
+                chances -= 1
+
+            # ── Genetic fallback iteration ────────────────────────────
+            if chances == 0:
+                parents  = self.selection.select(
+                    self.population.individuals,
+                    self.population.size,
+                    self.evaluator.objective_directions,
+                )
+                offspring = self.variation.generate(parents, self.population.size)
+                self._evaluate_offspring(offspring)
+                self.population.individuals = self.replacement.replace(
+                    self.population.individuals,
+                    offspring,
+                    self.population.size,
+                    self.evaluator.objective_directions,
+                )
+                # Reset rank scores after genetic refresh.
+                best_score = min(self._scores())
+                chances    = self.max_chances
+
+            self.generations += 1
+            self._record_history()
+
+        return self.population

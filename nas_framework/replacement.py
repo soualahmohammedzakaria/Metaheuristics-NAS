@@ -38,3 +38,34 @@ class GenerationalReplacement(Replacement):
             offspring.extend(elite)
         return take_pareto_best(offspring, pop_size, objective_directions)
 
+
+
+class RankBasedReplacement(Replacement):
+    """Rank-based survivor selection from RB-IFA (Nguyen et al., ICAART 2025).
+
+    Instead of Pareto-front construction, individuals are scored by a
+    weighted rank across objectives (via mo_utils.rank_based_score) and
+    the *pop_size* lowest-scoring (best) individuals survive.
+
+    This is a drop-in replacement for ElitistReplacement when a focused
+    performance-efficiency tradeoff direction is preferred over full
+    Pareto coverage.
+
+    Parameters
+    ----------
+    w_perf : float
+        Weight given to performance objectives (direction +1).
+        Cost weight is 1 - w_perf.  Default 0.5 (balanced tradeoff).
+    """
+
+    def __init__(self, w_perf: float = 0.6):
+        self.w_perf = w_perf
+
+    def replace(self, population: list, offspring: list,
+                pop_size: int,
+                objective_directions: tuple[int, ...]) -> list:
+        from nas_framework.mo_utils import rank_based_score
+        combined = population + offspring
+        scores = rank_based_score(combined, objective_directions, self.w_perf)
+        ranked = sorted(zip(scores, combined), key=lambda x: x[0])
+        return [ind for _, ind in ranked[:pop_size]]
