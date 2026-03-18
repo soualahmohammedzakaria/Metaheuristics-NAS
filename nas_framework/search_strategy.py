@@ -1,5 +1,7 @@
 ﻿from abc import ABC, abstractmethod
 import random
+import math
+from typing import Callable
 from nas_framework.population import Population, Individual
 from nas_framework.selection import Selection
 from nas_framework.variation import Variation, MutationOnlyVariation, CrossoverMutationVariation
@@ -9,6 +11,7 @@ from nas_framework.replacement import Replacement
 from nas_framework.evaluator import Evaluator
 from nas_framework.termination import Termination, MaxEvaluationsTermination
 from nas_framework.history import History
+from nas_framework.mo_utils import dominates, assign_rank_and_crowding, pareto_front
 
 
 class SearchStrategy(ABC):
@@ -322,6 +325,345 @@ class BiPopulationUniformSamplingMOEADStrategy(SearchStrategy):
             self.generations += 1
             self._record_history()
 
+        return self.population
+
+
+class NPRASearchStrategy(SearchStrategy):
+    """
+    Non-dominated Population-based Relative Advantage (NPRA) search strategy.
+    
+    NPRA is a multi-objective optimization algorithm that:
+    - Maintains a non-dominated population (Pareto front)
+    - Partitions the population into regions based on reference points
+    - Calculates relative advantage of individuals within their region
+    - Selects individuals with high relative advantage and dominance
+    - Uses adaptive replacement to maintain diversity and convergence
+    """
+
+    def __init__(self, population: Population, crossover: Crossover,
+                 mutation: Mutation, evaluator: Evaluator,
+                 budget: int = 500, n_reference_points: int = 5,
+                 neighborhood_size: int = 3,
+                 relative_advantage_weight: float = 0.6,
+                 termination: Termination | None = None,
+                 history: History | None = None):
+        """
+        Initialize NPRA search strategy.
+        
+        Args:
+            population: Initial population
+            crossover: Crossover operator
+            mutation: Mutation operator
+            evaluator: Evaluator function
+            budget: Maximum evaluations
+            n_reference_points: Number of reference points for niching
+            neighborhood_size: Size of neighborhood around each reference point
+            relative_advantage_weight: Weight of relative advantage vs dominance
+            termination: Termination condition
+            history: History tracker
+        """
+        from nas_framework.selection import TournamentSelection
+        from nas_framework.replacement import ElitistReplacement
+        
+        super().__init__(
+            population=population,
+            selection=TournamentSelection(k=2),
+            variation=CrossoverMutationVariation(crossover, mutation),
+            replacement=ElitistReplacement(),
+            evaluator=evaluator,
+            termination=termination,
+            history=history,
+            budget=budget,
+        )
+        self.crossover = crossover
+        self.mutation = mutation
+        self.n_reference_points = max(2, n_reference_points)
+        self.neighborhood_size = max(1, neighborhood_size)
+        self.relative_advantage_weight = max(0.0, min(1.0, relative_advantage_weight))
+        self.reference_points: list[tuple[float, ...]] = []
+        self.region_assignments: dict[int, int] = {}  # individual idx -> region idx
+
+    def _generate_reference_points(self, n_objectives: int) -> list[tuple[float, ...]]:
+        """Generate uniformly distributed reference points in objective space."""
+        if n_objectives == 2:
+            return [
+                (i / max(1, self.n_reference_points - 1), 
+                 1.0 - i / max(1, self.n_reference_points - 1))
+                for i in range(self.n_reference_points)
+            ]
+        
+        # For higher dimensions, use random normalized vectors
+        points = []
+        for _ in range(self.n_reference_points):
+            raw = [random.random() for _ in range(n_objectives)]
+            total = sum(raw)
+            if total > 0:
+                point = tuple(v / total for v in raw)
+            else:
+                point = tuple(1.0 / n_objectives for _ in range(n_objectives))
+            points.append(point)
+        return points
+
+    def _objective_to_maximization(self, fitness: tuple[float, ...],
+                                   directions: tuple[int, ...]) -> tuple[float, ...]:
+        """Convert fitness to maximization form."""
+        return tuple(value * direction for value, direction in zip(fitness, directions))
+
+    def _scalarize_fitness(self, fitness: tuple[float, ...], 
+                           reference_point: tuple[float, ...],
+                           directions: tuple[int, ...]) -> float:
+        """
+        Scalarize multi-objective fitness using weighted Tchebycheff decomposition.
+        
+        This measures how well the individual aligns with a reference point region.
+        """
+        eps = 1e-12
+        fitness_max = self._objective_to_maximization(fitness, directions)
+        
+        # Weighted Tchebycheff scalarization
+        scalarized = max(
+            (reference_point[i] + eps) * abs(1.0 - fitness_max[i])
+            for i in range(len(fitness))
+        )
+        return scalarized
+
+    def _assign_regions(self) -> None:
+        """Assign each individual to the closest reference point region."""
+        self.region_assignments.clear()
+        directions = self.evaluator.objective_directions
+        
+        for idx, ind in enumerate(self.population.individuals):
+            if ind.fitness is None:
+                self.region_assignments[idx] = 0
+                continue
+            
+            best_region = 0
+            best_value = float('inf')
+            
+            for region_idx, ref_point in enumerate(self.reference_points):
+                value = self._scalarize_fitness(ind.fitness, ref_point, directions)
+                if value < best_value:
+                    best_value = value
+                    best_region = region_idx
+            
+            self.region_assignments[idx] = best_region
+
+    def _calculate_relative_advantage(self, 
+                                     individual_idx: int,
+                                     region_idx: int) -> float:
+        """
+        Calculate relative advantage of an individual within its region.
+        
+        Relative advantage is based on:
+        - Dominance over others in the same region
+        - Scalarized fitness alignment with reference point
+        """
+        individual = self.population.individuals[individual_idx]
+        directions = self.evaluator.objective_directions
+        
+        if individual.fitness is None:
+            return 0.0
+        
+        # Count individuals dominated in this region
+        dominated_count = 0
+        region_members = [
+            idx for idx, region in self.region_assignments.items()
+            if region == region_idx
+        ]
+        
+        for other_idx in region_members:
+            if other_idx != individual_idx:
+                other = self.population.individuals[other_idx]
+                if dominates(individual, other, directions):
+                    dominated_count += 1
+        
+        # Scalarized fitness contribution
+        ref_point = self.reference_points[region_idx]
+        scalarized = self._scalarize_fitness(individual.fitness, ref_point, directions)
+        
+        # Combine dominance count and scalarized fitness
+        dominance_advantage = dominated_count / max(1, len(region_members) - 1)
+        scalarized_advantage = 1.0 / (1.0 + scalarized)  # Invert: smaller scalarized is better
+        
+        # Weighted combination
+        advantage = (
+            self.relative_advantage_weight * dominance_advantage +
+            (1.0 - self.relative_advantage_weight) * scalarized_advantage
+        )
+        return advantage
+
+    def _select_high_advantage_parents(self, n_parents: int) -> list[Individual]:
+        """Select parents based on relative advantage within their regions."""
+        if not self.population.individuals:
+            return []
+        
+        # Assign individuals to regions
+        self._assign_regions()
+        
+        # Calculate relative advantage for each individual
+        advantages = {}
+        for idx in range(len(self.population.individuals)):
+            region = self.region_assignments[idx]
+            advantage = self._calculate_relative_advantage(idx, region)
+            advantages[idx] = advantage
+        
+        # Select parents using advantage-based selection
+        candidates = []
+        for idx, advantage in advantages.items():
+            # Include in tournament with probability proportional to advantage
+            if random.random() < min(1.0, advantage + 0.1):  # +0.1 to ensure everyone has a chance
+                candidates.append(idx)
+        
+        # Ensure we have at least n_parents candidates
+        if len(candidates) < n_parents:
+            # Fill remaining slots with tournament selection
+            remaining = n_parents - len(candidates)
+            for _ in range(remaining):
+                idx = random.choice(list(range(len(self.population.individuals))))
+                candidates.append(idx)
+        
+        # Sample parents from candidates
+        selected_indices = random.sample(candidates, min(len(candidates), n_parents))
+        return [self.population.individuals[idx] for idx in selected_indices]
+
+    def _replace_with_advantage(self, offspring: list[Individual]) -> None:
+        """
+        Replace population members using both dominance and relative advantage.
+        
+        Replacement strategy:
+        - Offspring that dominate population members replace them
+        - Otherwise, replace worst individuals in same region if offspring has high advantage
+        - Always maintain Pareto front diversity
+        """
+        if not offspring:
+            return
+        
+        directions = self.evaluator.objective_directions
+        self._assign_regions()
+        
+        for child in offspring:
+            if child.fitness is None:
+                continue
+            
+            child_region = self._assign_single_individual_region(child)
+            child_advantage = self._calculate_relative_advantage_for_new(child, child_region)
+            
+            # Strategy 1: Direct dominance replacement
+            replaced = False
+            for pop_idx, pop_ind in enumerate(self.population.individuals):
+                if dominates(child, pop_ind, directions):
+                    self.population.individuals[pop_idx] = child
+                    replaced = True
+                    break
+            
+            if replaced:
+                continue
+            
+            # Strategy 2: Replace worst in same region if child has advantage
+            region_members = [
+                idx for idx, region in self.region_assignments.items()
+                if region == child_region
+            ]
+            
+            if region_members:
+                # Find worst member in region
+                worst_idx = min(region_members, 
+                               key=lambda idx: self._calculate_relative_advantage(idx, child_region))
+                worst_advantage = self._calculate_relative_advantage(worst_idx, child_region)
+                
+                # Replace if child has better advantage
+                if child_advantage > worst_advantage:
+                    self.population.individuals[worst_idx] = child
+
+    def _assign_single_individual_region(self, individual: Individual) -> int:
+        """Assign a single new individual to the closest reference point region."""
+        directions = self.evaluator.objective_directions
+        
+        if individual.fitness is None:
+            return 0
+        
+        best_region = 0
+        best_value = float('inf')
+        
+        for region_idx, ref_point in enumerate(self.reference_points):
+            value = self._scalarize_fitness(individual.fitness, ref_point, directions)
+            if value < best_value:
+                best_value = value
+                best_region = region_idx
+        
+        return best_region
+
+    def _calculate_relative_advantage_for_new(self, 
+                                              individual: Individual,
+                                              region_idx: int) -> float:
+        """Calculate relative advantage for a new individual."""
+        directions = self.evaluator.objective_directions
+        
+        if individual.fitness is None:
+            return 0.0
+        
+        dominated_count = 0
+        region_members = [
+            idx for idx, region in self.region_assignments.items()
+            if region == region_idx
+        ]
+        
+        for other_idx in region_members:
+            other = self.population.individuals[other_idx]
+            if dominates(individual, other, directions):
+                dominated_count += 1
+        
+        ref_point = self.reference_points[region_idx]
+        scalarized = self._scalarize_fitness(individual.fitness, ref_point, directions)
+        
+        dominance_advantage = dominated_count / max(1, len(region_members))
+        scalarized_advantage = 1.0 / (1.0 + scalarized)
+        
+        advantage = (
+            self.relative_advantage_weight * dominance_advantage +
+            (1.0 - self.relative_advantage_weight) * scalarized_advantage
+        )
+        return advantage
+
+    def run(self) -> Population:
+        """Execute NPRA search."""
+        self.population.initialize()
+        self.evaluations = len(self.population)
+        self.generations = 0
+        
+        # Generate reference points based on objectives
+        n_objectives = len(self.population.individuals[0].fitness)
+        self.reference_points = self._generate_reference_points(n_objectives)
+        
+        self._record_history()
+        
+        while not self.termination.should_stop(self.evaluations, self.generations):
+            # Selection: select parents based on relative advantage
+            parents = self._select_high_advantage_parents(self.population.size)
+            
+            if not parents:
+                parents = self.population.individuals[:self.population.size]
+            
+            # Variation: crossover and mutation
+            offspring = self.variation.generate(parents, self.population.size)
+            self._evaluate_offspring(offspring)
+            
+            # Replacement: dominance + relative advantage based
+            self._replace_with_advantage(offspring)
+            
+            # Ensure population doesn't exceed size (keep elite)
+            if len(self.population.individuals) > self.population.size:
+                # Keep best individuals using rank and crowding
+                assign_rank_and_crowding(self.population.individuals, 
+                                        self.evaluator.objective_directions)
+                self.population.individuals.sort(
+                    key=lambda ind: (ind.rank, -ind.crowding_distance)
+                )
+                self.population.individuals = self.population.individuals[:self.population.size]
+            
+            self.generations += 1
+            self._record_history()
+        
         return self.population
 
 
