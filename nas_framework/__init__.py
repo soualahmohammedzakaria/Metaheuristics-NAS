@@ -1,4 +1,4 @@
-﻿from nas_framework.search_space import SearchSpace, CSVSearchSpace
+from nas_framework.search_space import SearchSpace, CSVSearchSpace
 from nas_framework.benchmark_api import BenchmarkAPI, NASBench201BenchmarkAPI, CSVBenchmarkAPI
 from nas_framework.evaluator import Evaluator
 from nas_framework.population import Individual, Population
@@ -17,6 +17,15 @@ from nas_framework.history import History, HistoryEntry
 from nas_framework.search_strategy import (
     SearchStrategy, GeneticAlgorithm, EvolutionStrategy, RandomSearch,
 )
+from nas_framework.de_nas_strategy import (
+    DESearchStrategy,
+    DifferentialEvolutionVariation,
+)
+from nas_framework.moea_nas_strategy import (
+    NSGAIIStrategy,
+    SPEAIIStrategy,
+    MOPSOStrategy,
+)
 
 __all__ = [
     "SearchSpace",
@@ -32,5 +41,6 @@ __all__ = [
     "Termination", "MaxEvaluationsTermination", "MaxGenerationsTermination",
     "CompositeTermination", "History", "HistoryEntry",
     "SearchStrategy", "GeneticAlgorithm", "EvolutionStrategy", "RandomSearch",
+    "DESearchStrategy", "DifferentialEvolutionVariation",
+    "NSGAIIStrategy", "SPEAIIStrategy", "MOPSOStrategy",
 ]
-
