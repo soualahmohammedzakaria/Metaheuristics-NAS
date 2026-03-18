@@ -604,3 +604,144 @@ class FireflySearchStrategy(SearchStrategy):
             self._record_history()
 
         return self.population
+
+class PSOSearchStrategy(SearchStrategy):
+    """MOIPSO: Multi-Objective PSO with trigonometric acceleration and
+    adaptive Gaussian mutation 
+
+    Algorithm per iteration
+    -----------------------
+    1. Draw dynamic acceleration factors:
+           c1 = 2.05 * |cos(2*pi*rand)|
+           c2 = 2.05 * |sin(2*pi*rand)|
+    2. Update each particle's velocity and position (discrete PSO, Eq. 5-6).
+    3. Evaluate new positions.
+    4. Apply GaussianMutation (sigma = 0.1*(1 - t/T)) to a random half of
+       the population; evaluate mutated particles.
+    5. CrowdingReplacement: keep best *pop_size* by Pareto rank + crowding.
+    6. Update pbests and gbest.
+
+    Parameters
+    ----------
+    population : PSOPopulation
+    selection  : Selection      (kept for signature compatibility; not used
+                                 in main PSO loop — gbest drives movement)
+    crossover  : Crossover      (same — not used in main loop)
+    mutation   : GaussianMutation
+    replacement: CrowdingReplacement  (or any Replacement)
+    evaluator  : Evaluator
+    budget     : int            (total number of architecture evaluations)
+    w          : float          (inertia weight; default 0.4)
+    """
+
+    def __init__(self, population, selection, crossover, mutation,
+                 replacement, evaluator, budget: int = 500,
+                 termination=None, history=None, w: float = 0.4):
+        # Build a dummy variation so SearchStrategy.__init__ is satisfied
+        from nas_framework.variation import CrossoverMutationVariation
+        variation = CrossoverMutationVariation(crossover, mutation)
+        super().__init__(
+            population=population,
+            selection=selection,
+            variation=variation,
+            replacement=replacement,
+            evaluator=evaluator,
+            budget=budget,
+            termination=termination,
+            history=history,
+        )
+        self.w = w
+        self._mutation = mutation     # GaussianMutation (direct access)
+        self.budget = budget
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _trig_coefficients(self):
+        """Return dynamic c1, c2 (Eq. 8 from MOIPSO paper)."""
+        import math
+        r = random.random()
+        c1 = 2.05 * abs(math.cos(2 * math.pi * r))
+        c2 = 2.05 * abs(math.sin(2 * math.pi * r))
+        return c1, c2
+
+    def _evaluate_particle(self, ind):
+        """Evaluate a single Individual, update evaluations counter."""
+        ind.fitness = self.evaluator.evaluate(ind.genotype)
+        if hasattr(self.population.search_space, "metadata_from_genotype"):
+            ind.metadata = self.population.search_space.metadata_from_genotype(
+                ind.genotype)
+        self.evaluations += 1
+
+    # ------------------------------------------------------------------
+    # Main loop
+    # ------------------------------------------------------------------
+
+    def run(self):
+        """Execute the MOIPSO search loop and return the final Population."""
+        # Wire GaussianMutation's progress function to this strategy's state
+        if hasattr(self._mutation, '_get_progress'):
+            self._mutation._get_progress = lambda: self.evaluations / max(1, self.budget)
+
+        # Also set the PSOPopulation's inertia weight from strategy param
+        self.population.w = self.w
+
+        # Step 1 — Initialise (random positions, zero velocities, evaluate)
+        self.population.initialize()
+        self.evaluations = len(self.population.particles)
+        self.generations = 0
+        self._record_history()
+
+        while not self.termination.should_stop(self.evaluations, self.generations):
+            # Step 2 — Dynamic acceleration factors
+            c1, c2 = self._trig_coefficients()
+
+            # Step 3 — Velocity + position update (discrete PSO)
+            self.population.update_velocities_and_positions(c1, c2)
+
+            # Step 4 — Evaluate new positions
+            for p in self.population.particles:
+                if self.termination.should_stop(self.evaluations, self.generations):
+                    break
+                self._evaluate_particle(p.individual)
+
+            # Step 5 — Adaptive Gaussian mutation on random half of particles
+            n_mutate = max(1, len(self.population.particles) // 2)
+            targets = random.sample(self.population.particles, n_mutate)
+            for p in targets:
+                if self.termination.should_stop(self.evaluations, self.generations):
+                    break
+                mutated = self._mutation.mutate(p.individual)
+                self._evaluate_particle(mutated)
+                # Greedy replacement: keep mutated if better
+                from nas_framework.population import _weighted_score
+                dirs = self.evaluator.objective_directions
+                if (mutated.fitness is not None and
+                    (p.individual.fitness is None or
+                     _weighted_score(mutated.fitness, dirs) >
+                     _weighted_score(p.individual.fitness, dirs))):
+                    p.individual = mutated
+
+            # Step 6 — CrowdingReplacement: merge old + new, keep best N
+            self.population.sync_individuals()
+            # Filter out any individuals whose fitness was not set (e.g. if
+            # budget was exhausted mid-loop before evaluation completed).
+            alive = [ind for ind in self.population.individuals
+                     if ind.fitness is not None]
+            if not alive:
+                alive = self.population.individuals  # fallback: keep all
+            self.population.individuals = self.replacement.replace(
+                alive,
+                [],   # offspring already merged into particles above
+                self.population.size,
+                self.evaluator.objective_directions,
+            )
+
+            # Step 7 — Update pbests and gbest
+            self.population.update_pbests()
+
+            self.generations += 1
+            self._record_history()
+
+        return self.population

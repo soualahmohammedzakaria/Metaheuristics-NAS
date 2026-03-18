@@ -63,3 +63,45 @@ class ABCNeighborSampler(SinglePointMutation):
         return self.mutate(individual)
 
         
+
+# ---------------------------------------------------------------------------
+# PSO-specific mutation  (MOIPSO, Shao et al., Scientific Reports 2025)
+# ---------------------------------------------------------------------------
+
+class GaussianMutation(Mutation):
+    """Adaptive Gaussian mutation strategy from MOIPSO .
+
+    In the original paper (continuous space), the position perturbation is:
+        dx = N(0, sigma) * (ub - lb)
+        sigma = 0.1 * (1 - t / T)
+
+    In our discrete NAS search space (genes are integers in [0, num_ops)),
+    sigma is reinterpreted as a per-gene re-sampling probability: each gene
+    is independently replaced by a uniformly random operation with probability
+    sigma.  This preserves the intended annealing behaviour — broad random
+    exploration early in the search, negligible disruption near convergence —
+    while being compatible with discrete genotypes.
+
+    Parameters
+    ----------
+    search_space : SearchSpace
+    get_progress : callable () -> float
+        Returns a float in [0, 1] representing t / T (current fraction of
+        the total budget consumed).  PSOSearchStrategy passes a lambda that
+        reads self.evaluations / self.budget.
+    """
+
+    def __init__(self, search_space: SearchSpace,
+                 get_progress=None):
+        self.search_space = search_space
+        # get_progress() -> float in [0,1]; defaults to 0 (no annealing)
+        self._get_progress = get_progress if get_progress is not None else (lambda: 0.0)
+
+    def mutate(self, individual: Individual) -> Individual:
+        t_frac = max(0.0, min(1.0, self._get_progress()))
+        sigma = 0.1 * (1.0 - t_frac)           # shrinks from 0.1 → 0
+        geno = deepcopy(individual.genotype)
+        for i in range(len(geno)):
+            if random.random() < sigma:
+                geno[i] = random.randint(0, self.search_space.num_ops - 1)
+        return Individual(geno)
