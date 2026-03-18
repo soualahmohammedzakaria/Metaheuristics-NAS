@@ -1,14 +1,17 @@
+from __future__ import annotations
+
 import io
 import random
 import statistics
 import sys
-
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 from pathlib import Path
 
+# Ensure imports work when running: python experiments/test_mosa.py
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 from nas_framework.mosa import mosa, random_search
 
@@ -16,37 +19,43 @@ from nas_framework.mosa import mosa, random_search
 BUDGETS = [100, 300, 500]
 N_RUNS = 10
 COOLING_RATE = 0.85
+DEFAULT_BURN_IN = 100
 STRATEGIES = [
     ("Random Search", random_search, dict()),
-    ("MOSA", mosa, dict(cooling_rate=COOLING_RATE)),
+    ("MOSA", mosa, dict(cooling_rate=COOLING_RATE, burn_in_iters=DEFAULT_BURN_IN)),
 ]
 # ─────────────────────────────────────────────────────────────────────────────
 
-
 def run_once(strategy_fn, seed: int, budget: int, extra_kwargs: dict) -> dict:
-    archive = strategy_fn(total_budget=budget, seed=seed, **extra_kwargs)
-    if not archive:
+    front = strategy_fn(total_budget=budget, seed=seed, **extra_kwargs)
+
+    if not front:
         return {
             "acc": 0.0,
             "flops": float("inf"),
             "pareto_size": 0,
-            "summary": None,
+            "best_solution": None,
         }
 
-    best = max(archive, key=lambda s: (float(s.f1), -float(s.f2)))
+    best = max(front, key=lambda s: (s.f1, -s.f2))
+
     return {
-        "acc": float(best.f1),
-        "flops": float(best.f2),
-        "pareto_size": len(archive),
-        "summary": {
-            "conv_blocks": len(best.conv_blocks),
-            "fc_blocks": len(best.fc_blocks),
-        },
+        "acc": best.f1,
+        "flops": best.f2,
+        "pareto_size": len(front),
+        "best_solution": best,
     }
 
-
-def run_multiple(strategy_fn, extra_kwargs: dict, budget: int, n_runs: int) -> dict:
-    results = [run_once(strategy_fn, seed, budget, extra_kwargs) for seed in range(n_runs)]
+def run_multiple(
+    strategy_fn,
+    extra_kwargs: dict,
+    budget: int,
+    n_runs: int,
+) -> dict:
+    results = [
+        run_once(strategy_fn, seed, budget, extra_kwargs) for seed in range(n_runs)
+        for seed in range(n_runs)
+    ]
 
     accs = [r["acc"] for r in results]
     flps = [r["flops"] for r in results]
@@ -61,7 +70,7 @@ def run_multiple(strategy_fn, extra_kwargs: dict, budget: int, n_runs: int) -> d
         "flops_std": statistics.stdev(flps) if len(flps) > 1 else 0.0,
         "best_acc": top["acc"],
         "best_flops": top["flops"],
-        "best_summary": top["summary"],
+        "best_solution": top["best_solution"],
         "ps_mean": statistics.mean(pss),
         "ps_std": statistics.stdev(pss) if len(pss) > 1 else 0.0,
     }
@@ -112,11 +121,11 @@ def print_table(budget: int, data: dict):
 
     best_strategy = max(data.items(), key=lambda item: (item[1]["best_acc"], -item[1]["best_flops"]))
     name, stats = best_strategy
-    if stats.get("best_summary"):
-        bs = stats["best_summary"]
-        print(f"\nBest solution summary ({name}):")
-        print(f"  acc={stats['best_acc']:.4f}, flops={stats['best_flops']:.2e}")
-        print(f"  conv_blocks={bs['conv_blocks']}, fc_blocks={bs['fc_blocks']}")
+    print(f"\nBest solution ({name}):")
+    print(f"  acc={stats['best_acc']:.4f}, flops={stats['best_flops']:.2e}")
+    sol = stats.get("best_solution")
+    if sol is not None:
+        print(f"  conv_blocks={len(sol.conv_blocks)}, fc_blocks={len(sol.fc_blocks)}")
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
