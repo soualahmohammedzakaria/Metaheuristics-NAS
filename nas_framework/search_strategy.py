@@ -1,4 +1,5 @@
 ﻿from abc import ABC, abstractmethod
+import math
 import random
 from nas_framework.population import Population, Individual
 from nas_framework.selection import Selection
@@ -9,6 +10,10 @@ from nas_framework.replacement import Replacement
 from nas_framework.evaluator import Evaluator
 from nas_framework.termination import Termination, MaxEvaluationsTermination
 from nas_framework.history import History
+from nas_framework.search_space import SearchSpace
+from nas_framework.mo_utils import pareto_front as compute_pareto_front
+from nas_framework.mo_utils import exact_pareto_front_2d
+from nas_framework.mo_utils import dominates
 
 
 class SearchStrategy(ABC):
@@ -134,7 +139,7 @@ class EvolutionStrategy(SearchStrategy):
 
 
 class RandomSearch(SearchStrategy):
-    """Random search baseline â€” samples new architectures each iteration."""
+    """Random search baseline  samples new architectures each iteration."""
 
     def __init__(self, population: Population, selection: Selection,
                  crossover: Crossover, mutation: Mutation,
@@ -174,157 +179,335 @@ class RandomSearch(SearchStrategy):
 
         return self.population
 
-class BiPopulationUniformSamplingMOEADStrategy(SearchStrategy):
-    """Bi-population MOEA/D with uniform sampling and Tchebycheff decomposition."""
 
-    def __init__(self, population: Population, crossover: Crossover,
-                 mutation: Mutation, evaluator: Evaluator,
-                 budget: int = 500, neighborhood_size: int = 5,
-                 neighborhood_mating_prob: float = 0.9,
-                 max_replacements: int = 2,
-                 termination: Termination | None = None,
+class BruteForceParetoSearch:
+    """Exhaustive strategy that returns the optimal Pareto front on finite spaces."""
+
+    def __init__(self, search_space: SearchSpace, evaluator: Evaluator,
                  history: History | None = None):
-       
-        from nas_framework.selection import TournamentSelection
-        from nas_framework.replacement import ElitistReplacement
+        self.search_space = search_space
+        self.evaluator = evaluator
+        self.history = history or History()
+        self.evaluations: int = 0
+        self.generations: int = 0
+        self.population: list[Individual] = []
 
-        super().__init__(
-            population=population,
-            selection=TournamentSelection(k=2),
-            variation=CrossoverMutationVariation(crossover, mutation),
-            replacement=ElitistReplacement(),
-            evaluator=evaluator,
-            termination=termination,
-            history=history,
-            budget=budget,
+    def run(self) -> list[Individual]:
+        if not hasattr(self.search_space, "all_genotypes"):
+            raise TypeError(
+                "BruteForceParetoSearch requires a finite search space exposing "
+                "all_genotypes()."
+            )
+
+        individuals: list[Individual] = []
+        for genotype in self.search_space.all_genotypes():
+            fitness = self.evaluator.evaluate(genotype)
+            metadata = {}
+            if hasattr(self.search_space, "metadata_from_genotype"):
+                metadata = self.search_space.metadata_from_genotype(genotype)
+            elif hasattr(self.evaluator.benchmark, "get_metadata"):
+                metadata = self.evaluator.benchmark.get_metadata(genotype)
+            individuals.append(Individual(genotype[:], fitness, metadata=metadata))
+
+        self.population = individuals
+        self.evaluations = len(individuals)
+        self.generations = 1
+
+        front = compute_pareto_front(individuals, self.evaluator.objective_directions)
+        self.history.record(
+            generation=0,
+            evaluations=self.evaluations,
+            population=individuals,
+            pareto_front=front,
         )
-        self.crossover = crossover
-        self.mutation = mutation
-        self.neighborhood_size = max(2, neighborhood_size)
-        self.neighborhood_mating_prob = max(0.0, min(1.0, neighborhood_mating_prob))
-        self.max_replacements = max(1, max_replacements)
+        return front
 
-    @staticmethod
-    def _objective_to_maximization(fitness: tuple[float, ...],
-                                   directions: tuple[int, ...]) -> tuple[float, ...]:
-        return tuple(value * direction for value, direction in zip(fitness, directions))
 
-    def _init_weight_vectors(self, n_subproblems: int, n_objectives: int) -> list[tuple[float, ...]]:
-        if n_objectives == 2:
-            if n_subproblems == 1:
-                return [(0.5, 0.5)]
-            return [
-                (i / (n_subproblems - 1), 1.0 - (i / (n_subproblems - 1)))
-                for i in range(n_subproblems)
-            ]
+class SkylineSearch:
+    """Exact Pareto strategy for 2 objectives using sort+sweep skyline."""
 
-        vectors: list[tuple[float, ...]] = []
-        for _ in range(n_subproblems):
-            raw = [random.random() for _ in range(n_objectives)]
-            total = sum(raw)
-            if total == 0:
-                vectors.append(tuple(1.0 / n_objectives for _ in range(n_objectives)))
-            else:
-                vectors.append(tuple(v / total for v in raw))
-        return vectors
+    def __init__(self, search_space: SearchSpace, evaluator: Evaluator,
+                 history: History | None = None):
+        self.search_space = search_space
+        self.evaluator = evaluator
+        self.history = history or History()
+        self.evaluations: int = 0
+        self.generations: int = 0
+        self.population: list[Individual] = []
 
-    def _init_neighborhoods(self, lambdas: list[tuple[float, ...]]) -> list[list[int]]:
-        neighborhoods: list[list[int]] = []
-        t = min(self.neighborhood_size, len(lambdas))
-        for i, wi in enumerate(lambdas):
-            distances: list[tuple[float, int]] = []
-            for j, wj in enumerate(lambdas):
-                d = sum((a - b) ** 2 for a, b in zip(wi, wj))
-                distances.append((d, j))
-            distances.sort(key=lambda x: x[0])
-            neighborhoods.append([idx for _, idx in distances[:t]])
-        return neighborhoods
+    def run(self) -> list[Individual]:
+        if not hasattr(self.search_space, "all_genotypes"):
+            raise TypeError(
+                "SkylineSearch requires a finite search space exposing "
+                "all_genotypes()."
+            )
+        if len(self.evaluator.objective_directions) != 2:
+            raise ValueError("SkylineSearch supports exactly 2 objectives.")
 
-    @staticmethod
-    def _decomposition_value(fitness_max: tuple[float, ...],
-                             weight: tuple[float, ...],
-                             ideal_point: tuple[float, ...]) -> float:
-        eps = 1e-12
-        vals = [
-            max(weight[i], eps) * abs(ideal_point[i] - fitness_max[i])
-            for i in range(len(fitness_max))
-        ]
-        return max(vals)
+        individuals: list[Individual] = []
+        for genotype in self.search_space.all_genotypes():
+            fitness = self.evaluator.evaluate(genotype)
+            metadata = {}
+            if hasattr(self.search_space, "metadata_from_genotype"):
+                metadata = self.search_space.metadata_from_genotype(genotype)
+            elif hasattr(self.evaluator.benchmark, "get_metadata"):
+                metadata = self.evaluator.benchmark.get_metadata(genotype)
+            individuals.append(Individual(genotype[:], fitness, metadata=metadata))
 
-    def run(self) -> Population:
-        self.population.initialize()
-        self.evaluations = len(self.population)
+        self.population = individuals
+        self.evaluations = len(individuals)
+        self.generations = 1
+
+        directions_2d = (
+            self.evaluator.objective_directions[0],
+            self.evaluator.objective_directions[1],
+        )
+        front = exact_pareto_front_2d(individuals, directions_2d)
+        self.history.record(
+            generation=0,
+            evaluations=self.evaluations,
+            population=individuals,
+            pareto_front=front,
+        )
+        return front
+ 
+# Implementation of the method described in the article Multi-Objective
+#  White Shark Optimizer for Global Optimization and Rural Sports-Facilities
+#  Location Problem
+class MOWSOSearch:
+    """Multi-Objective White Shark Optimizer with archive true-distance pruning.
+
+    This follows the paper workflow with:
+    - White-shark speed and movement update phases
+    - External non-dominated archive
+    - True-distance based archive truncation
+    - Guide selection as archive member with maximum true distance
+    """
+
+    def __init__(
+        self,
+        search_space: SearchSpace,
+        evaluator: Evaluator,
+        pop_size: int = 50,
+        max_iterations: int = 100,
+        archive_size: int | None = None,
+        history: History | None = None,
+    ):
+        self.search_space = search_space
+        self.evaluator = evaluator
+        self.pop_size = pop_size
+        self.max_iterations = max_iterations
+        self.archive_size = archive_size or pop_size
+        self.history = history or History()
+
+        self.evaluations: int = 0
+        self.generations: int = 0
+        self.population: list[Individual] = []
+        self.archive: list[Individual] = []
+
+        # Parameters reported in the referenced WSO/MOWSO setup.
+        self.p_min = 0.5
+        self.p_max = 1.5
+        self.tau = 4.125
+        self.f_min = 0.07
+        self.f_max = 0.75
+        self.a0 = 6.25
+        self.a1 = 100.0
+        self.a2 = 0.0005
+
+    def _mu(self) -> float:
+        # Eq. (5): contraction factor.
+        inner = self.tau * self.tau - 4.0 * self.tau
+        inner = max(inner, 0.0)
+        denom = abs(2.0 - self.tau - math.sqrt(inner))
+        if denom <= 1e-12:
+            return 1.0
+        return 2.0 / denom
+
+    def _p1_p2(self, k: int, K: int) -> tuple[float, float]:
+        # Eq. (3) and Eq. (4) schedule used in the paper.
+        expo = math.exp(-((4.0 * k) / K) ** 2)
+        p1 = self.p_max + (self.p_max - self.p_min) * expo
+        p2 = self.p_min + (self.p_max - self.p_min) * expo
+        return p1, p2
+
+    def _mv(self, k: int, K: int) -> float:
+        # Eq. (11): movement force.
+        return 1.0 / (self.a0 + math.exp((K / 2.0 - k) / self.a1))
+
+    def _f(self) -> float:
+        # Eq. (10) form used in the paper text.
+        return self.f_min + (self.f_max - self.f_min) / (self.f_max + self.f_min)
+
+    def _ss(self, k: int, K: int) -> float:
+        # Eq. (14): olfactory/visual intensity.
+        return abs(1.0 - math.exp(-self.a2 * k / K))
+
+    def _bounds(self) -> tuple[float, float]:
+        return 0.0, float(self.search_space.num_ops - 1)
+
+    def _clip_position(self, pos: list[float]) -> list[float]:
+        lower, upper = self._bounds()
+        return [min(upper, max(lower, x)) for x in pos]
+
+    def _to_genotype(self, pos: list[float]) -> list[int]:
+        lower, upper = self._bounds()
+        return [int(min(upper, max(lower, round(x)))) for x in pos]
+
+    def _individual_from_pos(self, pos: list[float]) -> Individual:
+        genotype = self._to_genotype(pos)
+        fitness = self.evaluator.evaluate(genotype)
+        metadata = {}
+        if hasattr(self.search_space, "metadata_from_genotype"):
+            metadata = self.search_space.metadata_from_genotype(genotype)
+        elif hasattr(self.evaluator.benchmark, "get_metadata"):
+            metadata = self.evaluator.benchmark.get_metadata(genotype)
+        self.evaluations += 1
+        return Individual(genotype, fitness, metadata=metadata)
+
+    def _dominates(self, a: Individual, b: Individual) -> bool:
+        return dominates(a, b, self.evaluator.objective_directions)
+
+    def _distance(self, a: Individual, b: Individual) -> float:
+        if a.fitness is None or b.fitness is None:
+            return float("inf")
+        return math.sqrt(sum((x - y) ** 2 for x, y in zip(a.fitness, b.fitness)))
+
+    def _true_distance_scores(self, inds: list[Individual]) -> list[float]:
+        if len(inds) <= 1:
+            return [float("inf")] * len(inds)
+        scores: list[float] = []
+        for i, ind_i in enumerate(inds):
+            dists = [self._distance(ind_i, inds[j]) for j in range(len(inds)) if j != i]
+            dists.sort()
+            scores.append(sum(dists))
+        return scores
+
+    def _archive_update(self, candidates: list[Individual]) -> None:
+        # Merge by genotype key to avoid duplicates.
+        merged_by_key: dict[tuple[int, ...], Individual] = {}
+        for ind in self.archive + candidates:
+            merged_by_key[tuple(ind.genotype)] = ind
+        merged = list(merged_by_key.values())
+
+        nd = compute_pareto_front(merged, self.evaluator.objective_directions)
+        self.archive = nd
+
+        while len(self.archive) > self.archive_size:
+            td = self._true_distance_scores(self.archive)
+            remove_idx = min(range(len(self.archive)), key=lambda i: td[i])
+            del self.archive[remove_idx]
+
+    def _guide_position(self, positions: list[list[float]]) -> list[float]:
+        if not self.archive:
+            return random.choice(positions)[:]
+        td = self._true_distance_scores(self.archive)
+        guide = self.archive[max(range(len(self.archive)), key=lambda i: td[i])]
+        return [float(x) for x in guide.genotype]
+
+    def run(self) -> list[Individual]:
+        K = max(1, int(self.max_iterations))
+        mu = self._mu()
+
+        # Initialization
+        positions: list[list[float]] = []
+        velocities: list[list[float]] = []
+        individuals: list[Individual] = []
+        for _ in range(self.pop_size):
+            geno = self.search_space.random_individual()
+            pos = [float(x) for x in geno]
+            ind = self._individual_from_pos(pos)
+            positions.append(pos)
+            velocities.append([0.0] * len(pos))
+            individuals.append(ind)
+
+        self.population = individuals
+        self.archive = []
+        self._archive_update(individuals)
+
+        pbest_pos = [p[:] for p in positions]
+        pbest_ind = [Individual(ind.genotype[:], ind.fitness, ind.metadata.copy()) for ind in individuals]
+
         self.generations = 0
-        self._record_history()
+        self.history.record(
+            generation=self.generations,
+            evaluations=self.evaluations,
+            population=individuals,
+            pareto_front=self.archive,
+        )
 
-        if not self.population.individuals:
-            return self.population
+        for k in range(1, K + 1):
+            p1, p2 = self._p1_p2(k, K)
+            mv = self._mv(k, K)
+            f = self._f()
+            ss = self._ss(k, K)
+            guide = self._guide_position(positions)
 
-        n_subproblems = len(self.population.individuals)
-        n_objectives = len(self.population.individuals[0].fitness)
-        directions = self.evaluator.objective_directions
+            next_positions: list[list[float]] = []
+            next_individuals: list[Individual] = []
 
-        lambdas = self._init_weight_vectors(n_subproblems, n_objectives)
-        neighborhoods = self._init_neighborhoods(lambdas)
+            for i in range(self.pop_size):
+                v_idx = random.randint(0, self.pop_size - 1)
+                c1 = random.random()
+                c2 = random.random()
 
-        transformed = [
-            self._objective_to_maximization(ind.fitness, directions)
-            for ind in self.population.individuals
-        ]
-        ideal_point = tuple(max(vals[k] for vals in transformed) for k in range(n_objectives))
+                cur = positions[i]
+                vel = velocities[i]
+                pbest_v = pbest_pos[v_idx]
 
-        while not self.termination.should_stop(self.evaluations, self.generations):
-            for i in range(n_subproblems):
-                if random.random() < self.neighborhood_mating_prob:
-                    candidate_indices = neighborhoods[i]
+                new_vel = []
+                for d in range(len(cur)):
+                    step = vel[d] + p1 * (guide[d] - cur[d]) * c1 + p2 * (pbest_v[d] - cur[d]) * c2
+                    new_vel.append(mu * step)
+                velocities[i] = new_vel
+
+                if random.random() < mv:
+                    # Eq. (6), (7), (8), (9): boundary-aware movement.
+                    lower, upper = self._bounds()
+                    new_pos = []
+                    for d in range(len(cur)):
+                        a = 1.0 if cur[d] > upper else 0.0
+                        b = 1.0 if cur[d] < lower else 0.0
+                        w_o = 1.0 if (bool(a) ^ bool(b)) else 0.0
+                        new_pos.append(cur[d] * (1.0 - w_o) + upper * a + lower * b)
                 else:
-                    candidate_indices = list(range(n_subproblems))
+                    new_pos = [cur[d] + new_vel[d] / f for d in range(len(cur))]
 
-                if len(candidate_indices) == 1:
-                    p1_idx = p2_idx = candidate_indices[0]
-                else:
-                    p1_idx, p2_idx = random.sample(candidate_indices, 2)
+                if random.random() < ss:
+                    r1 = random.random()
+                    r2 = random.random()
+                    rand_dw = random.random()
+                    sign_dir = 1.0 if r2 >= 0.5 else -1.0
+                    d_w = [abs(rand_dw * (guide[d] - cur[d])) for d in range(len(cur))]
+                    w_prime = [guide[d] + r1 * d_w[d] * sign_dir for d in range(len(cur))]
+                    denom = 2.0 * max(random.random(), 1e-12)
+                    new_pos = [(new_pos[d] + w_prime[d]) / denom for d in range(len(cur))]
 
-                p1 = self.population.individuals[p1_idx]
-                p2 = self.population.individuals[p2_idx]
+                new_pos = self._clip_position(new_pos)
+                ind_new = self._individual_from_pos(new_pos)
 
-                child = self.crossover.crossover(p1, p2)
-                child = self.mutation.mutate(child)
-                self._evaluate_offspring([child])
+                if self._dominates(ind_new, pbest_ind[i]):
+                    pbest_pos[i] = new_pos[:]
+                    pbest_ind[i] = Individual(ind_new.genotype[:], ind_new.fitness, ind_new.metadata.copy())
+                elif (not self._dominates(pbest_ind[i], ind_new)) and random.random() < 0.5:
+                    pbest_pos[i] = new_pos[:]
+                    pbest_ind[i] = Individual(ind_new.genotype[:], ind_new.fitness, ind_new.metadata.copy())
 
-                if child.fitness is None:
-                    continue
+                next_positions.append(new_pos)
+                next_individuals.append(ind_new)
 
-                child_max = self._objective_to_maximization(child.fitness, directions)
-                ideal_point = tuple(
-                    max(ideal_point[k], child_max[k]) for k in range(n_objectives)
-                )
+            positions = next_positions
+            individuals = next_individuals
+            self.population = individuals
+            self._archive_update(individuals)
 
-                updated = 0
-                for j in neighborhoods[i]:
-                    incumbent = self.population.individuals[j]
-                    incumbent_max = self._objective_to_maximization(incumbent.fitness, directions)
-                    g_old = self._decomposition_value(incumbent_max, lambdas[j], ideal_point)
-                    g_new = self._decomposition_value(child_max, lambdas[j], ideal_point)
-                    if g_new <= g_old:
-                        self.population.individuals[j] = Individual(
-                            child.genotype[:],
-                            child.fitness,
-                            metadata=child.metadata.copy(),
-                        )
-                        updated += 1
-                        if updated >= self.max_replacements:
-                            break
+            self.generations = k
+            self.history.record(
+                generation=self.generations,
+                evaluations=self.evaluations,
+                population=individuals,
+                pareto_front=self.archive,
+            )
 
-                if self.termination.should_stop(self.evaluations, self.generations):
-                    break
-
-            self.generations += 1
-            self._record_history()
-
-        return self.population
-
-
-# Backward-compatible alias for older imports.
-MOEADStrategy = BiPopulationUniformSamplingMOEADStrategy
+        return [Individual(ind.genotype[:], ind.fitness, ind.metadata.copy()) for ind in self.archive]
 
