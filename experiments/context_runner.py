@@ -211,7 +211,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output-csv",
-        default="results/optimal_pareto_fronts.csv",
+            default="experiments/results/context_runner_pareto.csv",
         help="Path to output CSV for Pareto rows.",
     )
     parser.add_argument("--seed", type=int, default=None, help="Optional random seed.")
