@@ -23,6 +23,7 @@ from nas_framework.population import Individual, Population
 from nas_framework.replacement import ElitistReplacement
 from nas_framework.search_space import CSVSearchSpace
 from nas_framework.search_strategy import BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch
+from nas_framework.lf_mogp_search import LFMOGPSearch
 from nas_framework.selection import TournamentSelection
 from utilities.metrics import c_metric, hypervolume_2d, igd_plus, non_dominated
 from utilities.plotting import (
@@ -95,7 +96,19 @@ def _build_strategy(
             max_iterations=budget,
             archive_size=pop_size,
         )
+    if method == "lf_mogp":
+        return LFMOGPSearch(
+        search_space=search_space,
+        evaluator=evaluator,
+        pop_size=pop_size,
+        elite_size=max(5, pop_size // 3),
+        budget=budget,
+        max_generations=budget // 4,
+    )
     raise ValueError(f"Unknown method: {method}")
+
+
+
 
 
 def _to_points(front: list[Individual]) -> list[tuple[float, float]]:
@@ -397,7 +410,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--method",
-        choices=["random", "bruteforce", "skyline", "mowso"],
+        choices=["random", "bruteforce", "skyline", "mowso", "lf_mogp"],
         default="random",
         help="Search strategy method to analyze.",
     )
