@@ -55,6 +55,10 @@ class CSVSearchSpace(SearchSpace):
     def random_individual(self) -> list[int]:
         return random.choice(self._genotypes)[:]
 
+    def all_genotypes(self) -> list[list[int]]:
+        """Return every architecture genotype available in this finite search space."""
+        return [genes[:] for genes in self._genotypes]
+
     def metadata_from_genotype(self, genotype: list[int]) -> dict:
         return self._metadata_by_genotype.get(tuple(genotype), {
             "arch_id": None,
