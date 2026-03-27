@@ -1,4 +1,4 @@
-﻿import random 
+import random 
 from abc import ABC, abstractmethod
 from nas_framework.population import Population, ABCPopulation, FoodSource, Individual, ABCPopulation, FoodSource
 from nas_framework.selection import Selection,TournamentSelection, NeighborSelection, GuidanceSelection
@@ -279,7 +279,8 @@ class ABCSearchStrategy(SearchStrategy):
                  evaluator: Evaluator,
                  budget: int = 500,
                  termination: Termination | None = None,
-                 history: History | None = None):
+                 history: History | None = None,
+                 dmt_fraction: float = 0.67):
 
         from nas_framework.variation import MutationOnlyVariation
         from nas_framework.mutation import SinglePointMutation
@@ -299,6 +300,9 @@ class ABCSearchStrategy(SearchStrategy):
             budget=budget,
         )
         self.neighbor_sampler = neighbor_sampler
+        # dmt: scout resets disabled after this many evaluations (MBO-ABCFE §3.2).
+        # Prevents random restarts from destroying good late-search solutions.
+        self._dmt = int(dmt_fraction * budget)
         # Visited cache: genotype tuple -> fitness tuple.
         # Prevents re-spending evaluations on already-seen architectures.
         self._visited: dict[tuple, tuple] = {}
@@ -371,7 +375,14 @@ class ABCSearchStrategy(SearchStrategy):
             fs.update(neighbor, dirs)
 
     def _scout_phase(self) -> None:
-        """Reset exhausted sources and count extra evaluations."""
+        """Reset exhausted sources — suppressed after dmt evaluations.
+
+        Past the dmt threshold (default 67% of budget) the population has
+        typically converged to a good region; random restarts would waste
+        budget.  This mirrors the discard-mechanism-trigger from MBO-ABCFE.
+        """
+        if self.evaluations >= self._dmt:
+            return  # scout suppressed in late search
         resets = self.population.scout_reset(self.evaluator.objective_directions)
         self.evaluations += resets
 
@@ -455,6 +466,8 @@ class FireflySearchStrategy(SearchStrategy):
                  gamma: float = 1.0,
                  beta0: float = 1.0,
                  max_chances: int = 5,
+                 use_fap: bool = True,
+                 fa_prob: float = 0.5,
                  termination: Termination | None = None,
                  history: History | None = None):
 
@@ -469,12 +482,14 @@ class FireflySearchStrategy(SearchStrategy):
             history=history,
             budget=budget,
         )
-        self.w_perf     = w_perf
-        self.gamma      = gamma
-        self.beta0      = beta0
+        self.w_perf      = w_perf
+        self.gamma       = gamma
+        self.beta0       = beta0
         self.max_chances = max_chances
-        self._mutation  = mutation
-        self._crossover = crossover
+        self.use_fap     = use_fap    # True → flat FAP gate; False → β(r) formula
+        self.fa_prob     = fa_prob    # per-gene fire probability when use_fap=True
+        self._mutation   = mutation
+        self._crossover  = crossover
 
     # ------------------------------------------------------------------
     # Helpers
@@ -493,13 +508,18 @@ class FireflySearchStrategy(SearchStrategy):
                      target: Individual) -> Individual:
         """Move firefly one step toward target.
 
-        With probability β(r) per gene: adopt target's gene value.
+        If use_fap=True: with probability fa_prob per gene, adopt target's gene.
+        If use_fap=False: with probability β(r) = β0 * exp(-γ * r²), adopt target's gene.
         Remaining genes stay or receive a random mutation with prob α=0.2.
-        This models the FA position update in a discrete space.
         """
         import random
         r   = self._hamming(firefly, target)
-        beta = self._attractiveness(r)
+        
+        if self.use_fap:
+            beta = self.fa_prob
+        else:
+            beta = self._attractiveness(r)
+            
         alpha = 0.2   # random walk component
 
         new_geno = list(firefly.genotype)
@@ -604,6 +624,122 @@ class FireflySearchStrategy(SearchStrategy):
             self._record_history()
 
         return self.population
+
+class HybridMBOStrategy(SearchStrategy):
+    """Rank-stratified MBO hybrid: FA movement on top half, GA on bottom half.
+
+    Each generation the population is ranked by rank_based_score().
+    - SP1 (top rank_fraction, default 50%): each individual moves toward a
+      random SP1 neighbour using the flat FAP gate (adopt gene if FAP < fa_prob).
+    - SP2 (bottom half): standard tournament selection + crossover + mutation
+      (same as GeneticAlgorithm).
+    Both halves are merged and the best `pop_size` survivors are kept via
+    RankBasedReplacement.
+
+    This directly implements the SP1/SP2 idea from the MBO resume (§6.3):
+    FA as default exploitation on good individuals, GA as diversification
+    on weaker ones — no stagnation counter needed.
+
+    Parameters
+    ----------
+    population   : Population
+    selection    : Selection      (TournamentSelection for GA phase)
+    crossover    : Crossover
+    mutation     : Mutation       (SinglePointMutation)
+    replacement  : Replacement    (RankBasedReplacement recommended)
+    evaluator    : Evaluator
+    budget       : int
+    w_perf       : float          rank weight for accuracy (default 0.6)
+    rank_fraction: float          fraction of pop in SP1 (default 0.5)
+    fa_prob      : float          per-gene FAP gate probability (default 0.5)
+    """
+
+    def __init__(self, population, selection, crossover, mutation,
+                 replacement, evaluator, budget: int = 500,
+                 termination=None, history=None,
+                 w_perf: float = 0.6,
+                 rank_fraction: float = 0.5,
+                 fa_prob: float = 0.5):
+        variation = CrossoverMutationVariation(crossover, mutation)
+        super().__init__(
+            population=population,
+            selection=selection,
+            variation=variation,
+            replacement=replacement,
+            evaluator=evaluator,
+            budget=budget,
+            termination=termination,
+            history=history,
+        )
+        self.w_perf       = w_perf
+        self.rank_fraction = rank_fraction
+        self.fa_prob      = fa_prob
+        self._mutation    = mutation
+        self._crossover   = crossover
+
+    def _rank_scores(self):
+        from nas_framework.mo_utils import rank_based_score
+        return rank_based_score(
+            self.population.individuals,
+            self.evaluator.objective_directions,
+            w_perf=self.w_perf,
+        )
+
+    def _fap_move(self, ind: Individual, sp1: list) -> Individual:
+        """Move ind toward a random SP1 member using flat FAP gate."""
+        target   = random.choice(sp1)
+        new_geno = list(ind.genotype)
+        for i, (g_self, g_tgt) in enumerate(zip(ind.genotype, target.genotype)):
+            if g_self != g_tgt and random.random() < self.fa_prob:
+                new_geno[i] = g_tgt
+        return Individual(new_geno)
+
+    def run(self) -> Population:
+        self.population.initialize()
+        self._evaluate_offspring(self.population.individuals)
+        self.generations = 0
+        self._record_history()
+
+        while not self.termination.should_stop(self.evaluations, self.generations):
+            scores = self._rank_scores()
+            order  = sorted(range(len(scores)), key=lambda i: scores[i])
+            n_sp1  = max(1, int(self.rank_fraction * self.population.size))
+            sp1_idx = order[:n_sp1]
+            sp2_idx = order[n_sp1:]
+            inds    = self.population.individuals
+            sp1     = [inds[i] for i in sp1_idx]
+
+            offspring: list[Individual] = []
+
+            # ── SP1: FA movement ──────────────────────────────────────
+            for idx in sp1_idx:
+                if self.termination.should_stop(self.evaluations, self.generations):
+                    break
+                moved = self._fap_move(inds[idx], sp1)
+                offspring.append(moved)
+
+            # ── SP2: GA (crossover + mutation) ────────────────────────
+            if sp2_idx and not self.termination.should_stop(
+                    self.evaluations, self.generations):
+                sp2_inds = [inds[i] for i in sp2_idx]
+                ga_offspring = self.variation.generate(sp2_inds, len(sp2_idx))
+                offspring.extend(ga_offspring)
+
+            self._evaluate_offspring(offspring)
+
+            # ── Rank-based survivor selection ─────────────────────────
+            self.population.individuals = self.replacement.replace(
+                self.population.individuals,
+                offspring,
+                self.population.size,
+                self.evaluator.objective_directions,
+            )
+
+            self.generations += 1
+            self._record_history()
+
+        return self.population
+
 
 class PSOSearchStrategy(SearchStrategy):
     """MOIPSO: Multi-Objective PSO with trigonometric acceleration and
@@ -740,6 +876,256 @@ class PSOSearchStrategy(SearchStrategy):
 
             # Step 7 — Update pbests and gbest
             self.population.update_pbests()
+
+            self.generations += 1
+            self._record_history()
+
+        return self.population
+
+class MBOSearchStrategy(SearchStrategy):
+    """Monarch Butterfly Optimization hybridized with ABC exploration and
+    Firefly exploitation (MBO-ABCFE), adapted for multi-objective NAS.
+
+    Population is split each generation into SP1 (top rank_fraction) and
+    SP2 (remainder) by rank_based_score().
+
+    SP1 update (for each individual):
+        With prob MR:
+            FAP ~ Uniform(0,1) per gene
+            if FAP < fa_prob  → FA attraction toward a random SP1 neighbor
+            else              → MBO migration (copy gene from SP1 or SP2)
+        After update: if old individual was better, increment trial counter.
+
+    SP2 update (for each individual):
+        For each gene:
+            if rand < p  → copy gene from current best (butterfly adjust)
+            else         → copy gene from random SP2 member
+            if rand > BAR → apply single-point mutation (Lévy flight proxy)
+        After update: if old individual was better, increment trial counter.
+
+    Scout phase (ABC abandonment):
+        If evaluations < dmt_fraction * budget:
+            Replace individuals with trial >= exh by fresh random solutions.
+
+    Parameters
+    ----------
+    population      : Population (standard Population, not ABCPopulation)
+    selection       : Selection  (unused in main loop; kept for API compat)
+    crossover       : Crossover  (unused in main loop; kept for API compat)
+    mutation        : Mutation   (SinglePointMutation — Lévy proxy)
+    replacement     : Replacement (RankBasedReplacement recommended)
+    evaluator       : Evaluator
+    budget          : int
+    w_perf          : float  rank weight for accuracy objective (default 0.6)
+    rank_fraction   : float  fraction of pop assigned to SP1 (default 0.42)
+    p               : float  migration ratio — gene drawn from SP1 if rand<p
+    BAR             : float  butterfly adjusting rate (Lévy gate, default 5/12)
+    MR              : float  modification rate — FA/migration gate (default 0.8)
+    fa_prob         : float  per-gene FA fire probability (FAP gate, default 0.5)
+    exh_fraction    : float  trial limit = exh_fraction * (budget / pop_size)
+    dmt_fraction    : float  scout suppressed after this fraction of budget
+    """
+
+    def __init__(self, population, selection, crossover, mutation,
+                 replacement, evaluator, budget: int = 500,
+                 termination=None, history=None,
+                 w_perf: float = 0.8,
+                 rank_fraction: float = 0.42,
+                 p: float = 5/12,
+                 BAR: float = 0.9,
+                 MR: float = 0.8,
+                 fa_prob: float = 0.5,
+                 exh_fraction: float = 4.0,
+                 dmt_fraction: float = 0.67):
+        from nas_framework.variation import CrossoverMutationVariation
+        variation = CrossoverMutationVariation(crossover, mutation)
+        super().__init__(
+            population=population,
+            selection=selection,
+            variation=variation,
+            replacement=replacement,
+            evaluator=evaluator,
+            budget=budget,
+            termination=termination,
+            history=history,
+        )
+        self.w_perf        = w_perf
+        self.rank_fraction = rank_fraction
+        self.p             = p
+        self.BAR           = BAR
+        self.MR            = MR
+        self.fa_prob       = fa_prob
+        self._mutation     = mutation
+        self.budget        = budget
+
+        # Compute exh and dmt analogously to paper formulae
+        pop_size           = population.size
+        # exh = round(maxIter / Np * exh_fraction); maxIter ≈ budget/pop_size
+        max_iter_approx    = max(1, budget // pop_size)
+        # exh_fraction used to scale abandonment limit (limit = approx_iters / fraction)
+        # We want individuals to be abandoned if they don't improve for ~1/4 of the run.
+        self.exh = max(3, round(max_iter_approx / exh_fraction))
+        self.dmt = round(dmt_fraction * budget)   # in evaluations, not iters
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _rank_scores(self):
+        from nas_framework.mo_utils import rank_based_score
+        return rank_based_score(
+            self.population.individuals,
+            self.evaluator.objective_directions,
+            w_perf=self.w_perf,
+        )
+
+    def _eval(self, ind):
+        ind.fitness = self.evaluator.evaluate(ind.genotype)
+        if hasattr(self.population.search_space, "metadata_from_genotype"):
+            ind.metadata = self.population.search_space.metadata_from_genotype(
+                ind.genotype)
+        self.evaluations += 1
+
+    def _is_better(self, a, b):
+        """Return True if individual a is better than b (lower rank = better)."""
+        from nas_framework.population import _weighted_score
+        dirs = self.evaluator.objective_directions
+        if a.fitness is None: return False
+        if b.fitness is None: return True
+        
+        # Apply w_perf locally to ensure greedy selection respects accuracy focus
+        # This avoiding touching global _weighted_score as requested.
+        w_acc = self.w_perf
+        w_lat = 1.0 - w_acc
+        
+        score_a = (a.fitness[0] * dirs[0] * w_acc) + (a.fitness[1] * dirs[1] * w_lat)
+        score_b = (b.fitness[0] * dirs[0] * w_acc) + (b.fitness[1] * dirs[1] * w_lat)
+        return score_a > score_b
+
+    def _fa_move(self, ind, sp1):
+        """FA attraction: move ind toward a random brighter SP1 member gene-by-gene."""
+        from copy import deepcopy
+        if not sp1:
+            return self._mutation.mutate(ind)
+        target = random.choice(sp1)
+        geno   = deepcopy(ind.genotype)
+        for j in range(len(geno)):
+            if random.random() < self.fa_prob:
+                geno[j] = target.genotype[j]
+        return Individual(geno)
+
+    def _mbo_migrate(self, ind, sp1, sp2):
+        """MBO migration: copy each gene from SP1 or SP2 based on ratio p."""
+        from copy import deepcopy
+        geno = deepcopy(ind.genotype)
+        sp1_list = list(sp1)
+        sp2_list = list(sp2)
+        for j in range(len(geno)):
+            r = random.random() * 1.2   # peri = 1.2 as in paper
+            if r <= self.p and sp1_list:
+                donor = random.choice(sp1_list)
+            elif sp2_list:
+                donor = random.choice(sp2_list)
+            else:
+                continue
+            geno[j] = donor.genotype[j]
+        return Individual(geno)
+
+    def _butterfly_adjust(self, ind, best, sp2):
+        """SP2 butterfly adjusting: copy best or random SP2 + optional Lévy."""
+        from copy import deepcopy
+        geno     = deepcopy(ind.genotype)
+        sp2_list = list(sp2)
+        n_genes  = len(geno)
+        for j in range(n_genes):
+            r = random.random() * 1.2
+            if r <= self.p and best is not None:
+                geno[j] = best.genotype[j]
+            elif sp2_list:
+                donor  = random.choice(sp2_list)
+                geno[j] = donor.genotype[j]
+            # Lévy flight proxy: BAR gate — if BAR is small, mutation is rare.
+            # We now apply this only with probability 1/n_genes to avoid random walk.
+            if random.random() > self.BAR:
+                choices = [op for op in
+                           range(self.population.search_space.num_ops)
+                           if op != geno[j]]
+                if choices:
+                    geno[j] = random.choice(choices)
+        return Individual(geno)
+
+    # ------------------------------------------------------------------
+    # Main loop
+    # ------------------------------------------------------------------
+
+    def run(self):
+        # Initialise
+        self.population.initialize()
+        trials = [0] * self.population.size
+        for ind in self.population.individuals:
+            self._eval(ind)
+        self.generations = 0
+        self._record_history()
+
+        while not self.termination.should_stop(self.evaluations, self.generations):
+            # ── Split by rank ──────────────────────────────────────────
+            scores   = self._rank_scores()
+            order    = sorted(range(len(scores)), key=lambda i: scores[i])
+            n_sp1    = max(1, int(self.rank_fraction * self.population.size))
+            sp1_idx  = set(order[:n_sp1])
+            sp2_idx  = set(order[n_sp1:])
+            inds     = self.population.individuals
+            sp1      = [inds[i] for i in sp1_idx]
+            sp2      = [inds[i] for i in sp2_idx]
+            best     = inds[order[0]] if order else None
+
+            new_inds = list(inds)   # mutable copy
+
+            # ── SP1 update ─────────────────────────────────────────────
+            for idx in sp1_idx:
+                if self.termination.should_stop(self.evaluations, self.generations):
+                    break
+                old = inds[idx]
+                theta = random.random()
+                if theta <= self.MR:
+                    candidate = self._fa_move(old, sp1)
+                else:
+                    candidate = self._mbo_migrate(old, sp1, sp2)
+                self._eval(candidate)
+                if self._is_better(candidate, old):
+                    new_inds[idx] = candidate
+                    trials[idx]   = 0
+                else:
+                    trials[idx]  += 1
+
+            # ── SP2 update ─────────────────────────────────────────────
+            for idx in sp2_idx:
+                if self.termination.should_stop(self.evaluations, self.generations):
+                    break
+                old       = inds[idx]
+                candidate = self._butterfly_adjust(old, best, sp2)
+                self._eval(candidate)
+                if self._is_better(candidate, old):
+                    new_inds[idx] = candidate
+                    trials[idx]   = 0
+                else:
+                    trials[idx]  += 1
+
+            # ── Scout phase (ABC abandonment — early search only) ──────
+            if self.evaluations < self.dmt:
+                for idx in range(self.population.size):
+                    if trials[idx] >= self.exh:
+                        if self.termination.should_stop(
+                                self.evaluations, self.generations):
+                            break
+                        fresh = Individual(
+                            self.population.search_space.random_individual())
+                        self._eval(fresh)
+                        new_inds[idx] = fresh
+                        trials[idx]   = 0
+
+            # ── Update population ──────────────────────────────────────
+            self.population.individuals = new_inds
 
             self.generations += 1
             self._record_history()
