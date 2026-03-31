@@ -22,7 +22,7 @@ from nas_framework.mutation import SinglePointMutation
 from nas_framework.population import Individual, Population
 from nas_framework.replacement import ElitistReplacement
 from nas_framework.search_space import CSVSearchSpace
-from nas_framework.search_strategy import BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch
+from nas_framework.search_strategy import BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch, MOSHOSearch
 from nas_framework.selection import TournamentSelection
 from utilities.metrics import c_metric, hypervolume_2d, normalized_hypervolume_2d, igd_plus, non_dominated
 from utilities.plotting import (
@@ -91,9 +91,17 @@ def _build_strategy(
         return MOWSOSearch(
             search_space=search_space,
             evaluator=evaluator,
-            pop_size=pop_size,
-            max_iterations=budget,
-            archive_size=pop_size,
+            pop_size=50,
+            max_iterations=300,
+            archive_size=50,
+        )
+    if method == "mosho":
+        return MOSHOSearch(
+            search_space=search_space,
+            evaluator=evaluator,
+            pop_size=50,
+            max_iterations=300,
+            archive_size=50,
         )
     raise ValueError(f"Unknown method: {method}")
 
@@ -407,7 +415,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--method",
-        choices=["random", "bruteforce", "skyline", "mowso"],
+        choices=["random", "bruteforce", "skyline", "mowso", "mosho"],
         default="random",
         help="Search strategy method to analyze.",
     )

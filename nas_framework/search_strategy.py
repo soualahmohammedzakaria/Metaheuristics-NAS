@@ -289,7 +289,7 @@ class MOWSOSearch:
         search_space: SearchSpace,
         evaluator: Evaluator,
         pop_size: int = 50,
-        max_iterations: int = 100,
+        max_iterations: int = 300,
         archive_size: int | None = None,
         history: History | None = None,
     ):
@@ -510,4 +510,453 @@ class MOWSOSearch:
             )
 
         return [Individual(ind.genotype[:], ind.fitness, ind.metadata.copy()) for ind in self.archive]
+
+
+class MOSHOSearch:
+    """Multi-Objective Shark Hunting Optimization for NAS-Bench-201."""
+
+    OPS = [
+        "none",
+        "skip_connect",
+        "nor_conv_1x1",
+        "nor_conv_3x3",
+        "avg_pool_3x3",
+    ]
+    GENE_SIZE = 6
+    GENE_VALUES = list(range(len(OPS)))
+
+    def __init__(
+        self,
+        search_space: SearchSpace,
+        evaluator: Evaluator,
+        pop_size: int = 50,
+        max_iterations: int = 300,
+        archive_size: int | None = None,
+        e0: float = 1.0,
+        e_min: float = 0.1,
+        e_max: float = 2.0,
+        eta: float = 15.0,
+        delta: float = 0.03,
+        history: History | None = None,
+    ):
+        self.search_space = search_space
+        self.evaluator = evaluator
+        self.pop_size = pop_size
+        self.max_iterations = max_iterations
+        self.archive_size = archive_size or pop_size
+        self.history = history or History()
+
+        self.e0 = e0
+        self.e_min = e_min
+        self.e_max = e_max
+        self.eta = eta
+        self.delta = delta
+
+        if self.search_space.num_edges != self.GENE_SIZE:
+            raise ValueError(
+                f"MOSHOSearch expects {self.GENE_SIZE} genes, got "
+                f"{self.search_space.num_edges}."
+            )
+        if self.search_space.num_ops != len(self.GENE_VALUES):
+            raise ValueError(
+                f"MOSHOSearch expects {len(self.GENE_VALUES)} operations, got "
+                f"{self.search_space.num_ops}."
+            )
+
+        self.base_probs = {
+            "patrol": 0.20,
+            "scent": 0.25,
+            "circle": 0.15,
+            "burst": 0.10,
+            "crossover": 0.20,
+            "scout": 0.10,
+        }
+        self._op_credit: dict[str, float] = {op: 0.5 for op in self.base_probs}
+
+        self.evaluations: int = 0
+        self.generations: int = 0
+        self.population: list[Individual] = []
+        self.archive: list[Individual] = []
+        self._energy: list[float] = []
+
+        self._archive_sampler_dirty = True
+        self._archive_sampler_weights: list[float] = []
+
+    def _clone_individual(self, ind: Individual) -> Individual:
+        metadata = ind.metadata.copy() if ind.metadata else {}
+        return Individual(ind.genotype[:], ind.fitness, metadata=metadata)
+
+    def _evaluate_arch(self, arch: list[int]) -> Individual:
+        fitness = self.evaluator.evaluate(arch)
+        metadata = {}
+        if hasattr(self.search_space, "metadata_from_genotype"):
+            metadata = self.search_space.metadata_from_genotype(arch)
+        elif hasattr(self.evaluator.benchmark, "get_metadata"):
+            metadata = self.evaluator.benchmark.get_metadata(arch)
+        self.evaluations += 1
+        return Individual(arch[:], fitness, metadata=metadata)
+
+    def _random_arch(self) -> list[int]:
+        return self.search_space.random_individual()
+
+    def _mutate_gene(self, arch: list[int], idx: int) -> list[int]:
+        new_arch = arch[:]
+        choices = [v for v in self.GENE_VALUES if v != new_arch[idx]]
+        new_arch[idx] = random.choice(choices)
+        return new_arch
+
+    def _crowding_scores(self, inds: list[Individual]) -> list[float]:
+        if not inds:
+            return []
+        if len(inds) <= 2:
+            return [float("inf")] * len(inds)
+
+        scores = [0.0 for _ in inds]
+        n_obj = len(self.evaluator.objective_directions)
+        for obj in range(n_obj):
+            direction = self.evaluator.objective_directions[obj]
+            order = sorted(
+                range(len(inds)),
+                key=lambda i: inds[i].fitness[obj] * direction,
+            )
+            scores[order[0]] = float("inf")
+            scores[order[-1]] = float("inf")
+
+            min_v = inds[order[0]].fitness[obj] * direction
+            max_v = inds[order[-1]].fitness[obj] * direction
+            if max_v == min_v:
+                continue
+
+            for k in range(1, len(order) - 1):
+                idx = order[k]
+                if scores[idx] == float("inf"):
+                    continue
+                prev_v = inds[order[k - 1]].fitness[obj] * direction
+                next_v = inds[order[k + 1]].fitness[obj] * direction
+                scores[idx] += (next_v - prev_v) / (max_v - min_v)
+        return scores
+
+    def _archive_update(self, candidate: Individual) -> bool:
+        for archived in self.archive:
+            if dominates(archived, candidate, self.evaluator.objective_directions):
+                return False
+
+        kept: list[Individual] = []
+        changed = False
+        for archived in self.archive:
+            if dominates(candidate, archived, self.evaluator.objective_directions):
+                changed = True
+                continue
+            kept.append(archived)
+
+        if any(
+            tuple(archived.genotype) == tuple(candidate.genotype)
+            and archived.fitness == candidate.fitness
+            for archived in kept
+        ):
+            return changed
+
+        kept.append(self._clone_individual(candidate))
+        self.archive = kept
+        self._archive_sampler_dirty = True
+        return True
+
+    def _truncate_archive(self) -> None:
+        if len(self.archive) <= self.archive_size:
+            return
+
+        scores = self._crowding_scores(self.archive)
+        order = sorted(range(len(self.archive)), key=lambda i: scores[i], reverse=True)
+        keep = set(order[: self.archive_size])
+        self.archive = [self.archive[i] for i in range(len(self.archive)) if i in keep]
+        self._archive_sampler_dirty = True
+
+    def _refresh_archive_sampler(self) -> None:
+        if not self.archive:
+            self._archive_sampler_weights = []
+            self._archive_sampler_dirty = False
+            return
+
+        scores = self._crowding_scores(self.archive)
+        self._archive_sampler_weights = [
+            10.0 if math.isinf(score) else max(1e-3, score) for score in scores
+        ]
+        self._archive_sampler_dirty = False
+
+    def _sample_archive(self) -> Individual:
+        if self._archive_sampler_dirty or len(self._archive_sampler_weights) != len(self.archive):
+            self._refresh_archive_sampler()
+        if not self.archive:
+            raise ValueError("Cannot sample from an empty archive.")
+        return random.choices(self.archive, weights=self._archive_sampler_weights, k=1)[0]
+
+    def _patrol(self, arch: list[int]) -> list[int]:
+        u = max(1e-9, random.random())
+        k = int(min(self.GENE_SIZE, max(2, round((u ** -0.35) % self.GENE_SIZE))))
+        k = min(self.GENE_SIZE, max(2, k))
+        idxs = random.sample(range(self.GENE_SIZE), k=k)
+        new_arch = arch[:]
+        for idx in idxs:
+            new_arch = self._mutate_gene(new_arch, idx)
+        return new_arch
+
+    def _scent(self, arch: list[int]) -> list[int]:
+        target = self._sample_archive().genotype if self.archive else self._random_arch()
+        partner = random.choice(self.population).genotype
+
+        new_arch = arch[:]
+        for j in range(self.GENE_SIZE):
+            r = random.random()
+            if r < 0.55:
+                new_arch[j] = target[j]
+            elif r < 0.75:
+                new_arch[j] = partner[j]
+            elif r < 0.80:
+                new_arch[j] = random.choice(self.GENE_VALUES)
+        return new_arch
+
+    def _circle(self, arch: list[int]) -> list[int]:
+        k = 1 if random.random() < 0.7 else 2
+        idxs = random.sample(range(self.GENE_SIZE), k=k)
+        new_arch = arch[:]
+        for idx in idxs:
+            new_arch = self._mutate_gene(new_arch, idx)
+        return new_arch
+
+    def _burst(self, arch: list[int]) -> list[int]:
+        target = self._sample_archive().genotype if self.archive else self._random_arch()
+
+        k = max(1, int(round(0.33 * self.GENE_SIZE)))
+        copy_idx = set(random.sample(range(self.GENE_SIZE), k=k))
+
+        new_arch = [0] * self.GENE_SIZE
+        for j in range(self.GENE_SIZE):
+            if j in copy_idx:
+                new_arch[j] = target[j]
+            else:
+                new_arch[j] = arch[j] if random.random() < 0.65 else random.choice(self.GENE_VALUES)
+        return new_arch
+
+    def _crossover(self, arch: list[int]) -> list[int]:
+        if self.archive and random.random() < 0.55:
+            partner = self._sample_archive().genotype
+        else:
+            partner = random.choice(self.population).genotype
+
+        child = [arch[j] if random.random() < 0.5 else partner[j] for j in range(self.GENE_SIZE)]
+        if random.random() < 0.3:
+            idx = random.randrange(self.GENE_SIZE)
+            child[idx] = random.choice([v for v in self.GENE_VALUES if v != child[idx]])
+        return child
+
+    def _scout(self) -> list[int]:
+        return self._random_arch()
+
+    def _choose_operator(self, probs: dict[str, float]) -> str:
+        ops = list(probs.keys())
+        weights = list(probs.values())
+        return random.choices(ops, weights=weights, k=1)[0]
+
+    def _normalize_probs(self, probs: dict[str, float]) -> dict[str, float]:
+        total = sum(max(0.0, value) for value in probs.values())
+        if total <= 0.0:
+            n = max(1, len(probs))
+            return {key: 1.0 / n for key in probs}
+        return {key: max(0.0, value) / total for key, value in probs.items()}
+
+    def _operator_probability_adaptation(
+        self,
+        probs: dict[str, float],
+        imp_rate: float,
+        progress: float,
+    ) -> dict[str, float]:
+        p = max(0.0, min(1.0, progress))
+        improved = max(0.0, min(1.0, imp_rate))
+
+        adjusted = dict(probs)
+        adjusted["scout"] *= 1.0 + (1.0 - p) * (1.0 - improved)
+        adjusted["patrol"] *= 1.0 + 0.6 * (1.0 - p)
+        adjusted["scent"] *= 1.0 + 0.6 * p
+        adjusted["crossover"] *= 1.0 + 0.5 * p
+        adjusted["burst"] *= 1.0 + 0.3 * max(0.0, 0.2 - improved)
+        adjusted["circle"] *= 1.0 + 0.25 * improved
+
+        return self._normalize_probs(adjusted)
+
+    def _credit_biased_probs(self, probs: dict[str, float], progress: float) -> dict[str, float]:
+        if not probs:
+            return probs
+
+        p = max(0.0, min(1.0, progress))
+        mean_credit = sum(self._op_credit.get(op, 0.5) for op in probs) / max(1, len(probs))
+        strength = 0.35 + 0.35 * p
+
+        adjusted: dict[str, float] = {}
+        for op, base_p in probs.items():
+            credit = self._op_credit.get(op, 0.5)
+            multiplier = 1.0 + strength * (credit - mean_credit)
+            adjusted[op] = max(1e-9, base_p * multiplier)
+
+        adjusted = self._normalize_probs(adjusted)
+
+        floor = 0.04
+        n = len(adjusted)
+        if floor * n < 1.0:
+            rem = 1.0 - floor * n
+            adjusted = {op: floor + rem * prob for op, prob in adjusted.items()}
+            adjusted = self._normalize_probs(adjusted)
+
+        return adjusted
+
+    def _update_operator_credit(
+        self,
+        op: str,
+        accepted: bool,
+        archive_improved: bool,
+        dominates_current: bool,
+    ) -> None:
+        reward = 0.0
+        if archive_improved:
+            reward = 1.0
+        elif dominates_current and accepted:
+            reward = 0.8
+        elif accepted:
+            reward = 0.35
+
+        old = self._op_credit.get(op, 0.5)
+        alpha = 0.08
+        self._op_credit[op] = (1.0 - alpha) * old + alpha * reward
+
+    def _replace_low_energy(self, shark_idx: int) -> None:
+        if len(self.archive) >= 2:
+            a = self._sample_archive().genotype
+            b = self._sample_archive().genotype
+            child = [a[j] if random.random() < 0.5 else b[j] for j in range(self.GENE_SIZE)]
+            for j in range(self.GENE_SIZE):
+                if random.random() < 0.15:
+                    child[j] = random.choice(self.GENE_VALUES)
+            arch = child
+        else:
+            arch = self._scout()
+
+        result = self._evaluate_arch(arch)
+        self._archive_update(result)
+        self.population[shark_idx] = result
+        self._energy[shark_idx] = max(self.e0 * 0.5, self.e_min)
+
+    def _accept(
+        self,
+        current: Individual,
+        candidate: Individual,
+        archive_improved: bool,
+        progress: float,
+    ) -> bool:
+        if dominates(candidate, current, self.evaluator.objective_directions):
+            return True
+        if archive_improved:
+            return True
+        if not dominates(current, candidate, self.evaluator.objective_directions):
+            accept_prob = 0.4 * (1.0 - 0.7 * progress)
+            return random.random() < accept_prob
+        return False
+
+    def run(self) -> list[Individual]:
+        self.population = []
+        self.archive = []
+        self._energy = []
+        self._archive_sampler_dirty = True
+        self._archive_sampler_weights = []
+        self.evaluations = 0
+        self.generations = 0
+
+        for _ in range(self.pop_size):
+            arch = self._random_arch()
+            ind = self._evaluate_arch(arch)
+            self.population.append(ind)
+            self._energy.append(self.e0)
+            self._archive_update(ind)
+
+        if not self.population:
+            return []
+
+        self._truncate_archive()
+        self.history.record(
+            generation=self.generations,
+            evaluations=self.evaluations,
+            population=self.population,
+            pareto_front=self.archive,
+        )
+
+        recent_improvements: list[int] = []
+
+        total_iters = max(1, int(self.max_iterations))
+        for k in range(1, total_iters + 1):
+
+            archive_change_count = 0
+            improvement_trials = 0
+            progress = min(1.0, k / total_iters)
+
+            if recent_improvements:
+                imp_rate = sum(recent_improvements) / len(recent_improvements)
+            else:
+                imp_rate = 0.2
+            probs = self._operator_probability_adaptation(self.base_probs, imp_rate, progress)
+            probs = self._credit_biased_probs(probs, progress)
+
+            for i in range(len(self.population)):
+                shark = self.population[i]
+                op = self._choose_operator(probs)
+
+                if op == "patrol":
+                    candidate_arch = self._patrol(shark.genotype)
+                elif op == "scent":
+                    candidate_arch = self._scent(shark.genotype)
+                elif op == "circle":
+                    candidate_arch = self._circle(shark.genotype)
+                elif op == "burst":
+                    candidate_arch = self._burst(shark.genotype)
+                elif op == "crossover":
+                    candidate_arch = self._crossover(shark.genotype)
+                else:
+                    candidate_arch = self._scout()
+
+                if candidate_arch == shark.genotype:
+                    idx = random.randrange(self.GENE_SIZE)
+                    candidate_arch = self._mutate_gene(candidate_arch, idx)
+
+                candidate = self._evaluate_arch(candidate_arch)
+                archive_improved = self._archive_update(candidate)
+                dominates_current = dominates(candidate, shark, self.evaluator.objective_directions)
+                accepted = self._accept(shark, candidate, archive_improved, progress)
+
+                if accepted:
+                    energy_bonus = 0.2 if archive_improved else 0.05
+                    self.population[i] = candidate
+                    self._energy[i] = min(self.e_max, self._energy[i] + energy_bonus)
+                else:
+                    self._energy[i] = max(0.0, self._energy[i] - self.delta)
+
+                if archive_improved:
+                    archive_change_count += 1
+                improvement_trials += 1
+                self._update_operator_credit(op, accepted, archive_improved, dominates_current)
+
+                if self._energy[i] < self.e_min:
+                    self._replace_low_energy(i)
+
+            self._truncate_archive()
+
+            recent_improvements.append(1 if (improvement_trials > 0 and archive_change_count > 0) else 0)
+            if len(recent_improvements) > 20:
+                recent_improvements.pop(0)
+
+            self.generations = k
+            self.history.record(
+                generation=self.generations,
+                evaluations=self.evaluations,
+                population=self.population,
+                pareto_front=self.archive,
+            )
+
+        return [self._clone_individual(ind) for ind in self.archive]
 
