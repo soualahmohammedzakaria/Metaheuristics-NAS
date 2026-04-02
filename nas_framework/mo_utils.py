@@ -127,6 +127,58 @@ def pareto_front(individuals: Iterable[Individual],
     return fronts[0] if fronts else []
 
 
+def exact_pareto_front_2d(individuals: Iterable[Individual],
+                          directions: tuple[int, int]) -> list[Individual]:
+    """Exact first Pareto front for 2 objectives using sort+sweep.
+
+    This is equivalent to pairwise dominance for finite values and runs in
+    O(N log N) due to sorting.
+    """
+    inds = [ind for ind in individuals if ind.fitness is not None]
+    if not inds:
+        return []
+
+    valid: list[tuple[float, float, Individual]] = []
+    nan_like: list[Individual] = []
+    for ind in inds:
+        x = ind.fitness[0] * directions[0]
+        y = ind.fitness[1] * directions[1]
+        if x != x or y != y:
+            # Keep behavior compatible with pairwise dominance semantics where
+            # NaN values are effectively non-dominated.
+            nan_like.append(ind)
+            continue
+        valid.append((x, y, ind))
+
+    if not valid:
+        return nan_like
+
+    valid.sort(key=lambda row: (-row[0], -row[1]))
+    front: list[Individual] = []
+    best_y_seen = float("-inf")
+    i = 0
+    while i < len(valid):
+        x_value = valid[i][0]
+        group_start = i
+        group_best_y = valid[i][1]
+        while i < len(valid) and valid[i][0] == x_value:
+            if valid[i][1] > group_best_y:
+                group_best_y = valid[i][1]
+            i += 1
+
+        if group_best_y > best_y_seen:
+            for j in range(group_start, i):
+                _, y_value, ind = valid[j]
+                if y_value == group_best_y:
+                    ind.rank = 0
+                    front.append(ind)
+            best_y_seen = group_best_y
+
+    front.extend(nan_like)
+    crowding_distance(front, directions)
+    return front
+
+
 # ---------------------------------------------------------------------------
 # Rank-based scalar scoring  (RB-IFA, Nguyen et al., ICAART 2025)
 # ---------------------------------------------------------------------------
