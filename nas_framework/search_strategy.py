@@ -1919,3 +1919,492 @@ class MBOSearchStrategy(SearchStrategy):
             self._record_history()
 
         return self.population
+
+
+class DEANSSearchStrategy(SearchStrategy):
+    """Hybrid Differential Evolution with Adaptive Neighborhood Search (DEANS).
+
+    A novel population-based strategy combining:
+    - Differential Evolution (DE) for global exploration
+    - Adaptive Neighborhood Search (ANS) for local exploitation
+    - External archive for elite solution storage
+    - Rank-based selection and replacement
+
+    DE mutation adapted for discrete NAS space using genotype differences.
+    ANS adapts neighborhood size based on recent improvement success rate.
+    Archive maintains diverse elite solutions for guidance.
+
+    Parameters
+    ----------
+    population : Population
+    evaluator : Evaluator
+    budget : int
+    F : float - DE mutation scaling factor (default 0.8)
+    CR : float - DE crossover rate (default 0.9)
+    archive_size : int - External archive size (default pop_size)
+    neighborhood_size : int - Initial neighborhood size for ANS (default 3)
+    adaptation_rate : float - How quickly ANS adapts (default 0.1)
+    """
+
+    def __init__(self,
+                 population: Population,
+                 evaluator: Evaluator,
+                 budget: int = 500,
+                 F: float = 0.8,
+                 CR: float = 0.9,
+                 archive_size: int | None = None,
+                 neighborhood_size: int = 3,
+                 adaptation_rate: float = 0.1,
+                 termination: Termination | None = None,
+                 history: History | None = None):
+
+        # DEANS doesn't use standard selection/variation/replacement
+        # It implements its own DE-based operators
+        super().__init__(population, None, None, None, evaluator,
+                         termination=termination, history=history, budget=budget)
+
+        self.F = F
+        self.CR = CR
+        self.archive_size = archive_size or population.size
+        self.neighborhood_size = neighborhood_size
+        self.adaptation_rate = adaptation_rate
+
+        self.archive: list[Individual] = []
+        self.improvement_history: list[bool] = []
+        self.history_window = 10
+
+    def _dominates(self, a: Individual, b: Individual) -> bool:
+        """Check if a dominates b."""
+        return dominates(a, b, self.evaluator.objective_directions)
+
+    def _genotype_difference(self, a: list[int], b: list[int]) -> list[int]:
+        """Compute discrete difference vector for DE mutation."""
+        return [x - y for x, y in zip(a, b)]
+
+    def _genotype_add(self, base: list[int], diff: list[int]) -> list[int]:
+        """Add difference vector to base genotype (discrete)."""
+        result = []
+        for i, (b, d) in enumerate(zip(base, diff)):
+            # For discrete space, use modular arithmetic within operation bounds
+            new_val = (b + d) % self.population.search_space.num_ops
+            result.append(new_val)
+        return result
+
+    def _de_mutation(self, target: Individual, population: list[Individual]) -> list[int]:
+        """DE/rand/1 mutation adapted for discrete space."""
+        # Select three distinct random individuals
+        candidates = [ind for ind in population if ind != target]
+        if len(candidates) < 3:
+            # Fallback to random if not enough candidates
+            return self.population.search_space.random_individual()
+
+        r1, r2, r3 = random.sample(candidates, 3)
+
+        # Compute difference vector: r1 - r2
+        diff = self._genotype_difference(r1.genotype, r2.genotype)
+
+        # Scale by F and add to r3: r3 + F*(r1 - r2)
+        scaled_diff = [int(self.F * d) for d in diff]
+        mutant = self._genotype_add(r3.genotype, scaled_diff)
+
+        # Ensure bounds
+        mutant = [max(0, min(self.population.search_space.num_ops - 1, x)) for x in mutant]
+
+        return mutant
+
+    def _binomial_crossover(self, target: list[int], mutant: list[int]) -> list[int]:
+        """Binomial crossover for DE."""
+        trial = list(target)
+        j_rand = random.randint(0, len(target) - 1)
+
+        for j in range(len(target)):
+            if random.random() < self.CR or j == j_rand:
+                trial[j] = mutant[j]
+
+        return trial
+
+    def _neighborhood_search(self, individual: Individual, neighborhood_size: int) -> Individual:
+        """Perform local neighborhood search by flipping genes."""
+        genotype = list(individual.genotype)
+        genes_to_flip = random.sample(range(len(genotype)), min(neighborhood_size, len(genotype)))
+
+        for gene_idx in genes_to_flip:
+            # Flip to a different random operation
+            current_op = genotype[gene_idx]
+            available_ops = [op for op in range(self.population.search_space.num_ops) if op != current_op]
+            if available_ops:
+                genotype[gene_idx] = random.choice(available_ops)
+
+        return Individual(genotype)
+
+    def _update_archive(self, candidate: Individual) -> None:
+        """Update external archive with non-dominated solutions."""
+        # Remove dominated solutions
+        self.archive = [arch for arch in self.archive if not self._dominates(candidate, arch)]
+
+        # Add candidate if not dominated by any archive member
+        dominated = any(self._dominates(arch, candidate) for arch in self.archive)
+        if not dominated:
+            self.archive.append(Individual(candidate.genotype[:], candidate.fitness, candidate.metadata.copy()))
+
+        # Truncate archive if too large
+        if len(self.archive) > self.archive_size:
+            # Remove most crowded solution (simplified crowding distance)
+            crowding_distances = []
+            for i, ind_i in enumerate(self.archive):
+                distances = []
+                for j, ind_j in enumerate(self.archive):
+                    if i != j:
+                        dist = sum((a - b) ** 2 for a, b in zip(ind_i.fitness, ind_j.fitness)) ** 0.5
+                        distances.append(dist)
+                crowding_distances.append(sum(distances) if distances else 0)
+
+            # Remove individual with smallest crowding distance
+            remove_idx = crowding_distances.index(min(crowding_distances))
+            del self.archive[remove_idx]
+
+    def _adapt_neighborhood_size(self) -> int:
+        """Adapt neighborhood size based on recent improvement success."""
+        if len(self.improvement_history) < self.history_window:
+            return self.neighborhood_size
+
+        success_rate = sum(self.improvement_history[-self.history_window:]) / self.history_window
+
+        if success_rate > 0.6:
+            # High success - increase exploration
+            new_size = min(self.neighborhood_size + 1, self.population.search_space.num_edges)
+        elif success_rate < 0.3:
+            # Low success - decrease exploration, focus on exploitation
+            new_size = max(self.neighborhood_size - 1, 1)
+        else:
+            new_size = self.neighborhood_size
+
+        # Smooth adaptation
+        self.neighborhood_size = int(self.adaptation_rate * new_size + (1 - self.adaptation_rate) * self.neighborhood_size)
+        self.neighborhood_size = max(1, min(self.neighborhood_size, self.population.search_space.num_edges))
+
+        return self.neighborhood_size
+
+    def run(self) -> Population:
+        """Execute DEANS search strategy."""
+        self.population.initialize()
+        self.evaluations = len(self.population)
+        self.generations = 0
+        self.archive = []
+        self.improvement_history = []
+
+        # Initialize archive with initial population
+        for ind in self.population.individuals:
+            self._update_archive(ind)
+
+        self._record_history()
+
+        while not self.termination.should_stop(self.evaluations, self.generations):
+            offspring = []
+            improved_this_gen = False
+
+            # Adapt neighborhood size
+            current_neighborhood_size = self._adapt_neighborhood_size()
+
+            for target in self.population.individuals:
+                if self.termination.should_stop(self.evaluations, self.generations):
+                    break
+
+                # DE mutation and crossover
+                mutant_genotype = self._de_mutation(target, self.population.individuals)
+                trial_genotype = self._binomial_crossover(target.genotype, mutant_genotype)
+
+                # Create trial individual
+                trial = Individual(trial_genotype)
+                trial.fitness = self.evaluator.evaluate(trial_genotype)
+                if hasattr(self.population.search_space, "metadata_from_genotype"):
+                    trial.metadata = self.population.search_space.metadata_from_genotype(trial_genotype)
+                self.evaluations += 1
+
+                # Selection: keep better individual
+                if self._dominates(trial, target):
+                    offspring.append(trial)
+                    improved_this_gen = True
+                    self._update_archive(trial)
+                else:
+                    offspring.append(target)
+
+                # Adaptive local search with probability based on improvement
+                if random.random() < 0.3:  # 30% chance for local search
+                    local_candidate = self._neighborhood_search(target, current_neighborhood_size)
+                    local_candidate.fitness = self.evaluator.evaluate(local_candidate.genotype)
+                    if hasattr(self.population.search_space, "metadata_from_genotype"):
+                        local_candidate.metadata = self.population.search_space.metadata_from_genotype(local_candidate.genotype)
+                    self.evaluations += 1
+
+                    if self._dominates(local_candidate, target):
+                        # Replace target with local improvement
+                        offspring[-1] = local_candidate
+                        improved_this_gen = True
+                        self._update_archive(local_candidate)
+
+            # Update population
+            self.population.individuals = offspring
+
+            # Record improvement
+            self.improvement_history.append(improved_this_gen)
+
+            self.generations += 1
+            self._record_history()
+
+        return self.population
+
+
+class ACOLSSearchStrategy(SearchStrategy):
+    """Ant Colony Optimization with Local Search (ACO-LS) for NAS.
+
+    A population-based strategy inspired by ant foraging behavior:
+    - Ants construct genotypes probabilistically using pheromone trails
+    - Local search refines solutions adaptively
+    - External archive maintains elite solutions
+    - Pheromone evaporation and deposition guide search
+
+    Adapted for discrete NAS search spaces with multi-objective optimization.
+
+    Parameters
+    ----------
+    population : Population
+    evaluator : Evaluator
+    budget : int
+    alpha : float - Pheromone influence (default 1.0)
+    beta : float - Heuristic influence (default 2.0)
+    rho : float - Evaporation rate (default 0.1)
+    Q : float - Pheromone deposit constant (default 1.0)
+    archive_size : int - External archive size (default pop_size)
+    neighborhood_size : int - Initial neighborhood size for LS (default 2)
+    adaptation_rate : float - LS adaptation rate (default 0.1)
+    """
+
+    def __init__(self,
+                 population: Population,
+                 evaluator: Evaluator,
+                 budget: int = 500,
+                 alpha: float = 1.0,
+                 beta: float = 2.0,
+                 rho: float = 0.1,
+                 Q: float = 1.0,
+                 archive_size: int | None = None,
+                 neighborhood_size: int = 2,
+                 adaptation_rate: float = 0.1,
+                 termination: Termination | None = None,
+                 history: History | None = None):
+
+        super().__init__(population, None, None, None, evaluator,
+                         termination=termination, history=history, budget=budget)
+
+        self.alpha = alpha
+        self.beta = beta
+        self.rho = rho
+        self.Q = Q
+        self.archive_size = archive_size or population.size
+        self.neighborhood_size = neighborhood_size
+        self.adaptation_rate = adaptation_rate
+
+        # Pheromone matrix: positions x operations
+        num_positions = population.search_space.num_edges
+        num_ops = population.search_space.num_ops
+        self.pheromone = [[1.0 for _ in range(num_ops)] for _ in range(num_positions)]
+        self.heuristic = [1.0 for _ in range(num_ops)]  # Uniform heuristic
+
+        self.archive: list[Individual] = []
+        self.improvement_history: list[bool] = []
+        self.history_window = 10
+
+    def _dominates(self, a: Individual, b: Individual) -> bool:
+        """Check if a dominates b."""
+        return dominates(a, b, self.evaluator.objective_directions)
+
+    def _construct_solution(self) -> list[int]:
+        """Construct a genotype using ACO probabilistic selection."""
+        genotype = []
+        num_positions = len(self.pheromone)
+        num_ops = len(self.pheromone[0])
+
+        for pos in range(num_positions):
+            # Calculate probabilities for each operation
+            probs = []
+            total = 0.0
+
+            for op in range(num_ops):
+                tau = self.pheromone[pos][op] ** self.alpha
+                eta = self.heuristic[op] ** self.beta
+                prob = tau * eta
+                probs.append(prob)
+                total += prob
+
+            # Select operation probabilistically
+            if total == 0:
+                # Fallback to uniform if all pheromones are zero
+                selected_op = random.randint(0, num_ops - 1)
+            else:
+                r = random.random() * total
+                cumulative = 0.0
+                selected_op = 0
+                for op in range(num_ops):
+                    cumulative += probs[op]
+                    if r <= cumulative:
+                        selected_op = op
+                        break
+
+            genotype.append(selected_op)
+
+        return genotype
+
+    def _neighborhood_search(self, individual: Individual, neighborhood_size: int) -> Individual:
+        """Perform local neighborhood search by flipping genes."""
+        genotype = list(individual.genotype)
+        genes_to_flip = random.sample(range(len(genotype)), min(neighborhood_size, len(genotype)))
+
+        for gene_idx in genes_to_flip:
+            # Flip to a different random operation
+            current_op = genotype[gene_idx]
+            available_ops = [op for op in range(len(self.heuristic)) if op != current_op]
+            if available_ops:
+                genotype[gene_idx] = random.choice(available_ops)
+
+        return Individual(genotype)
+
+    def _update_archive(self, candidate: Individual) -> None:
+        """Update external archive with non-dominated solutions."""
+        # Remove dominated solutions
+        self.archive = [arch for arch in self.archive if not self._dominates(candidate, arch)]
+
+        # Add candidate if not dominated by any archive member
+        dominated = any(self._dominates(arch, candidate) for arch in self.archive)
+        if not dominated:
+            self.archive.append(Individual(candidate.genotype[:], candidate.fitness, candidate.metadata.copy() if candidate.metadata else None))
+
+        # Truncate archive if too large
+        if len(self.archive) > self.archive_size:
+            # Remove most crowded solution (simplified crowding distance)
+            crowding_distances = []
+            for i, ind_i in enumerate(self.archive):
+                distances = []
+                for j, ind_j in enumerate(self.archive):
+                    if i != j:
+                        dist = sum((a - b) ** 2 for a, b in zip(ind_i.fitness, ind_j.fitness)) ** 0.5
+                        distances.append(dist)
+            crowding_distances.append(sum(distances) if distances else 0)
+
+            # Remove individual with smallest crowding distance
+            remove_idx = crowding_distances.index(min(crowding_distances))
+            del self.archive[remove_idx]
+
+    def _update_pheromone(self) -> None:
+        """Update pheromone trails: evaporation and deposition."""
+        num_positions = len(self.pheromone)
+        num_ops = len(self.pheromone[0])
+
+        # Evaporation
+        for pos in range(num_positions):
+            for op in range(num_ops):
+                self.pheromone[pos][op] *= (1 - self.rho)
+
+        # Deposition from archive solutions
+        if self.archive:
+            for ind in self.archive:
+                # Scalarize fitness for pheromone deposit (higher fitness = more pheromone)
+                # Assuming minimization, invert and normalize
+                fitness_values = ind.fitness
+                scalar_fitness = sum(f * d for f, d in zip(fitness_values, self.evaluator.objective_directions))
+                deposit = self.Q / (1 + scalar_fitness)  # Higher fitness = more deposit
+
+                for pos in range(num_positions):
+                    op = ind.genotype[pos]
+                    self.pheromone[pos][op] += deposit
+
+    def _adapt_neighborhood_size(self) -> int:
+        """Adapt neighborhood size based on recent improvement success."""
+        if len(self.improvement_history) < self.history_window:
+            return self.neighborhood_size
+
+        success_rate = sum(self.improvement_history[-self.history_window:]) / self.history_window
+
+        if success_rate > 0.6:
+            # High success - increase exploration
+            new_size = min(self.neighborhood_size + 1, self.population.search_space.num_edges)
+        elif success_rate < 0.3:
+            # Low success - decrease exploration, focus on exploitation
+            new_size = max(self.neighborhood_size - 1, 1)
+        else:
+            new_size = self.neighborhood_size
+
+        # Smooth adaptation
+        self.neighborhood_size = int(self.adaptation_rate * new_size + (1 - self.adaptation_rate) * self.neighborhood_size)
+        self.neighborhood_size = max(1, min(self.neighborhood_size, self.population.search_space.num_edges))
+
+        return self.neighborhood_size
+
+    def run(self) -> Population:
+        """Execute ACO-LS search strategy."""
+        self.population.initialize()
+        self.evaluations = len(self.population)
+        self.generations = 0
+        self.archive = []
+        self.improvement_history = []
+
+        # Initialize archive with initial population
+        for ind in self.population.individuals:
+            self._update_archive(ind)
+
+        self._record_history()
+
+        while not self.termination.should_stop(self.evaluations, self.generations):
+            offspring = []
+            improved_this_gen = False
+
+            # Adapt neighborhood size
+            current_neighborhood_size = self._adapt_neighborhood_size()
+
+            for _ in range(self.population.size):
+                if self.termination.should_stop(self.evaluations, self.generations):
+                    break
+
+                # Construct solution using ACO
+                genotype = self._construct_solution()
+                candidate = Individual(genotype)
+                candidate.fitness = self.evaluator.evaluate(genotype)
+                if hasattr(self.population.search_space, "metadata_from_genotype"):
+                    candidate.metadata = self.population.search_space.metadata_from_genotype(genotype)
+                self.evaluations += 1
+
+                # Apply local search with probability
+                if random.random() < 0.4:  # 40% chance for local search
+                    local_candidate = self._neighborhood_search(candidate, current_neighborhood_size)
+                    local_candidate.fitness = self.evaluator.evaluate(local_candidate.genotype)
+                    if hasattr(self.population.search_space, "metadata_from_genotype"):
+                        local_candidate.metadata = self.population.search_space.metadata_from_genotype(local_candidate.genotype)
+                    self.evaluations += 1
+
+                    if self._dominates(local_candidate, candidate):
+                        candidate = local_candidate
+                        improved_this_gen = True
+
+                offspring.append(candidate)
+                self._update_archive(candidate)
+
+            # Update population using replacement (keep best)
+            from nas_framework.replacement import RankBasedReplacement
+            replacement = RankBasedReplacement()
+            self.population.individuals = replacement.replace(
+                self.population.individuals + offspring,
+                [],
+                self.population.size,
+                self.evaluator.objective_directions
+            )
+
+            # Update pheromone trails
+            self._update_pheromone()
+
+            # Record improvement
+            self.improvement_history.append(improved_this_gen)
+
+            self.generations += 1
+            self._record_history()
+
+        return self.population

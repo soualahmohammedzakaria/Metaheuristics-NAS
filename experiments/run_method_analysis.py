@@ -18,12 +18,12 @@ if str(ROOT) not in sys.path:
 from nas_framework.benchmark_api import CSVBenchmarkAPI
 from nas_framework.crossover import UniformCrossover
 from nas_framework.evaluator import Evaluator
-from nas_framework.mutation import SinglePointMutation
-from nas_framework.population import Individual, Population
-from nas_framework.replacement import ElitistReplacement
+from nas_framework.mutation import SinglePointMutation, GaussianMutation, ABCNeighborSampler
+from nas_framework.population import Individual, Population, PSOPopulation, ABCPopulation
+from nas_framework.replacement import ElitistReplacement, CrowdingReplacement, RankBasedReplacement
 from nas_framework.search_space import CSVSearchSpace
-from nas_framework.search_strategy import BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch, MOSHOSearch
-from nas_framework.selection import TournamentSelection
+from nas_framework.search_strategy import BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch, MOSHOSearch, PSOSearchStrategy, ABCSearchStrategy, FireflySearchStrategy, HybridMBOStrategy, DEANSSearchStrategy, ACOLSSearchStrategy
+from nas_framework.selection import TournamentSelection, RouletteWheelSelection
 from utilities.metrics import c_metric, hypervolume_2d, normalized_hypervolume_2d, igd_plus, non_dominated
 from utilities.plotting import (
     save_context_metric_heatmap,
@@ -102,6 +102,81 @@ def _build_strategy(
             pop_size=50,
             max_iterations=300,
             archive_size=50,
+        )
+    if method == "pso":
+        population = PSOPopulation(search_space, evaluator, size=pop_size, w=0.4)
+        return PSOSearchStrategy(
+            population=population,
+            selection=TournamentSelection(k=3),
+            crossover=UniformCrossover(),
+            mutation=GaussianMutation(search_space),
+            replacement=CrowdingReplacement(),
+            evaluator=evaluator,
+            budget=budget,
+            w=0.4,
+        )
+    if method == "abc":
+        limit = max(5, budget // 25)
+        population = ABCPopulation(search_space, evaluator, size=pop_size, abandonment_limit=limit)
+        return ABCSearchStrategy(
+            population=population,
+            neighbor_sampler=ABCNeighborSampler(search_space),
+            selection=RouletteWheelSelection(),
+            evaluator=evaluator,
+            budget=budget,
+        )
+    if method == "firefly":
+        return FireflySearchStrategy(
+            population=Population(search_space, evaluator, size=pop_size),
+            selection=TournamentSelection(k=3),
+            crossover=UniformCrossover(),
+            mutation=SinglePointMutation(search_space),
+            replacement=RankBasedReplacement(w_perf=0.6),
+            evaluator=evaluator,
+            budget=budget,
+            w_perf=0.6,
+            gamma=1.0,
+            beta0=1.0,
+            max_chances=5,
+            use_fap=True,
+            fa_prob=0.5,
+        )
+    if method == "hybrid_mbo":
+        return HybridMBOStrategy(
+            population=Population(search_space, evaluator, size=pop_size),
+            selection=TournamentSelection(k=3),
+            crossover=UniformCrossover(),
+            mutation=SinglePointMutation(search_space),
+            replacement=RankBasedReplacement(w_perf=0.6),
+            evaluator=evaluator,
+            budget=budget,
+            w_perf=0.6,
+            rank_fraction=0.5,
+            fa_prob=0.5,
+        )
+    if method == "deans":
+        return DEANSSearchStrategy(
+            population=Population(search_space, evaluator, size=pop_size),
+            evaluator=evaluator,
+            budget=budget,
+            F=0.8,
+            CR=0.9,
+            archive_size=pop_size,
+            neighborhood_size=3,
+            adaptation_rate=0.1,
+        )
+    if method == "aco_ls":
+        return ACOLSSearchStrategy(
+            population=Population(search_space, evaluator, size=pop_size),
+            evaluator=evaluator,
+            budget=budget,
+            alpha=1.0,
+            beta=2.0,
+            rho=0.1,
+            Q=1.0,
+            archive_size=pop_size,
+            neighborhood_size=2,
+            adaptation_rate=0.1,
         )
     raise ValueError(f"Unknown method: {method}")
 
@@ -415,7 +490,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--method",
-        choices=["random", "bruteforce", "skyline", "mowso", "mosho"],
+        choices=["random", "bruteforce", "skyline", "mowso", "mosho", "pso", "abc", "firefly", "hybrid_mbo", "deans", "aco_ls"],
         default="random",
         help="Search strategy method to analyze.",
     )
