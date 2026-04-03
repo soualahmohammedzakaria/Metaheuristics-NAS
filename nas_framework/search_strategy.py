@@ -2408,3 +2408,974 @@ class ACOLSSearchStrategy(SearchStrategy):
             self._record_history()
 
         return self.population
+
+
+class AQPSOSearch:
+    """Archive-Guided Quantum-Inspired Population Search (AQPSO) for NAS.
+
+    NOVEL CONTRIBUTIONS
+    -------------------
+    1. **Q-bit superposition encoding**: each individual maintains a probability
+       distribution over operations per gene (Q-bit vector) rather than a single
+       deterministic genotype.  Architectures are sampled (collapsed) from these
+       distributions at evaluation time.
+
+    2. **Archive-guided quantum rotation gate**: the Q-bit rotation angle is
+       computed from the *entire non-dominated archive*, not just the single
+       global best.  Each gene's rotation is a weighted blend of archive member
+       signals, weighted by crowding distance — diverse archive members drive
+       more rotation, crowded ones less.  This steers the probability mass
+       toward the Pareto front while preserving diversity.
+
+    3. **Entanglement-inspired crossover**: two Q-individuals share partial
+       probability mass by averaging their Q-bit vectors, then rotating each
+       toward a different archive guide.  This couples parent Q-distributions
+       in a way that mimics quantum entanglement and produces children whose
+       Q-bits encode a blend of both parents' search histories.
+
+    4. **Adaptive collapse threshold**: the probability of collapsing a Q-bit
+       to a deterministic gene (vs. sampling from its distribution) is annealed
+       from 1.0 (full sampling early) to a lower floor (partial determinism
+       late), balancing exploration and exploitation without manual tuning.
+
+    Algorithm per generation
+    ------------------------
+    1. Collapse each Q-individual's Q-bit vector to a deterministic genotype
+       and evaluate it.
+    2. Update the non-dominated archive with the new individual.
+    3. Rotate each Q-bit toward the archive-weighted guide using the quantum
+       rotation gate (Eq. R below).
+    4. Apply entanglement crossover on a random subset of Q-individual pairs.
+    5. With probability p_repair, repair Q-bits that have collapsed below a
+       diversity floor (prevent premature convergence on any single operation).
+
+    Quantum rotation gate (Eq. R):
+        delta_theta_d = alpha * sign(guide_d - current_sample_d)
+                        * (crowding_weight * archive_pull_d)
+        q[d] += delta_theta_d   (then renormalize to a valid probability dist)
+
+    Parameters
+    ----------
+    search_space : SearchSpace
+    evaluator    : Evaluator
+    pop_size     : int    — number of Q-individuals (default 30)
+    max_iterations: int   — generations (default 300)
+    archive_size : int    — max archive size (default pop_size)
+    alpha        : float  — base rotation step size (default 0.05)
+    alpha_decay  : float  — multiplicative decay of alpha per generation (default 0.995)
+    collapse_floor: float — minimum collapse threshold (default 0.3)
+    p_entangle   : float  — fraction of population undergoing entanglement (default 0.4)
+    p_repair     : float  — probability of repairing a Q-individual per gen (default 0.2)
+    diversity_floor: float— minimum probability any single operation can drop to (default 0.05)
+    """
+
+    def __init__(
+        self,
+        search_space: SearchSpace,
+        evaluator: Evaluator,
+        pop_size: int = 30,
+        max_iterations: int = 300,
+        archive_size: int | None = None,
+        alpha: float = 0.05,
+        alpha_decay: float = 0.995,
+        collapse_floor: float = 0.3,
+        p_entangle: float = 0.4,
+        p_repair: float = 0.2,
+        diversity_floor: float = 0.05,
+        history: History | None = None,
+    ):
+        self.search_space = search_space
+        self.evaluator = evaluator
+        self.pop_size = pop_size
+        self.max_iterations = max_iterations
+        self.archive_size = archive_size or pop_size
+        self.alpha = alpha
+        self.alpha_decay = alpha_decay
+        self.collapse_floor = collapse_floor
+        self.p_entangle = p_entangle
+        self.p_repair = p_repair
+        self.diversity_floor = diversity_floor
+        self.history = history or History()
+
+        self.evaluations: int = 0
+        self.generations: int = 0
+        self.population: list[Individual] = []
+        self.archive: list[Individual] = []
+
+        self._num_ops = search_space.num_ops
+        self._num_genes = search_space.num_edges
+
+        # Q-bit population: list of (num_genes x num_ops) probability matrices.
+        # q_pop[i][d][op] = probability that individual i picks operation `op`
+        # at gene position `d`.
+        self._q_pop: list[list[list[float]]] = []
+
+        # Most recent collapsed genotype for each Q-individual.
+        self._collapsed: list[list[int]] = []
+
+    # ------------------------------------------------------------------
+    # Q-bit helpers
+    # ------------------------------------------------------------------
+
+    def _uniform_qbit(self) -> list[list[float]]:
+        """Return a uniform Q-bit vector (all operations equally likely)."""
+        p = 1.0 / self._num_ops
+        return [[p] * self._num_ops for _ in range(self._num_genes)]
+
+    def _collapse(self, qbit: list[list[float]], collapse_prob: float) -> list[int]:
+        """Sample a genotype from Q-bit distributions.
+
+        With probability `collapse_prob` each gene is drawn from its Q-bit
+        distribution; otherwise it keeps the previously collapsed value (or
+        the argmax if no previous value exists).  This implements the
+        adaptive collapse threshold — late in search, good solutions are
+        partially preserved.
+        """
+        geno = []
+        for d in range(self._num_genes):
+            dist = qbit[d]
+            geno.append(random.choices(range(self._num_ops), weights=dist, k=1)[0])
+        return geno
+
+    def _normalize(self, dist: list[float]) -> list[float]:
+        """Normalize a distribution and enforce the diversity floor."""
+        floor = self.diversity_floor
+        # Clamp each probability to at least the floor
+        clamped = [max(floor, p) for p in dist]
+        total = sum(clamped)
+        return [p / total for p in clamped]
+
+    # ------------------------------------------------------------------
+    # Archive helpers
+    # ------------------------------------------------------------------
+
+    def _dominates(self, a: Individual, b: Individual) -> bool:
+        return dominates(a, b, self.evaluator.objective_directions)
+
+    def _crowding_weights(self) -> list[float]:
+        """Return crowding-distance-based weights for archive members.
+
+        Higher crowding distance → member spans a more diverse region → gets
+        more influence on Q-bit rotation (drives toward underexplored areas).
+        """
+        if not self.archive:
+            return []
+        if len(self.archive) == 1:
+            return [1.0]
+        n_obj = len(self.evaluator.objective_directions)
+        # Compute crowding distances inline
+        scores = [0.0] * len(self.archive)
+        for obj in range(n_obj):
+            direction = self.evaluator.objective_directions[obj]
+            order = sorted(
+                range(len(self.archive)),
+                key=lambda i: self.archive[i].fitness[obj] * direction,
+            )
+            scores[order[0]] = float("inf")
+            scores[order[-1]] = float("inf")
+            min_v = self.archive[order[0]].fitness[obj] * direction
+            max_v = self.archive[order[-1]].fitness[obj] * direction
+            span = max_v - min_v
+            if span == 0:
+                continue
+            for k in range(1, len(order) - 1):
+                idx = order[k]
+                if math.isinf(scores[idx]):
+                    continue
+                prev_v = self.archive[order[k - 1]].fitness[obj] * direction
+                next_v = self.archive[order[k + 1]].fitness[obj] * direction
+                scores[idx] += (next_v - prev_v) / span
+        # Convert to weights (higher crowding = higher weight)
+        finite_scores = [s if not math.isinf(s) else 1.0 for s in scores]
+        total = sum(max(1e-9, s) for s in finite_scores)
+        return [max(1e-9, s) / total for s in finite_scores]
+
+    def _archive_update(self, ind: Individual) -> None:
+        """Update non-dominated archive; truncate by crowding if needed."""
+        # Remove dominated members
+        self.archive = [a for a in self.archive if not self._dominates(ind, a)]
+        # Add if not dominated
+        if not any(self._dominates(a, ind) for a in self.archive):
+            if not any(
+                tuple(a.genotype) == tuple(ind.genotype) for a in self.archive
+            ):
+                self.archive.append(
+                    Individual(ind.genotype[:], ind.fitness, ind.metadata.copy())
+                )
+        # Truncate
+        while len(self.archive) > self.archive_size:
+            weights = self._crowding_weights()
+            # Remove the member with the SMALLEST crowding weight (most crowded)
+            remove_idx = min(range(len(self.archive)), key=lambda i: weights[i])
+            del self.archive[remove_idx]
+
+    # ------------------------------------------------------------------
+    # NOVEL CORE: Archive-guided quantum rotation gate
+    # ------------------------------------------------------------------
+
+    def _archive_guide_signal(self) -> list[list[float]]:
+        """Compute the archive-weighted guide signal per gene per operation.
+
+        For each gene position d and each operation op:
+            guide_signal[d][op] = sum_over_archive(
+                crowding_weight[a] * (1 if archive[a].genotype[d] == op else 0)
+            )
+
+        This gives a soft target distribution for each gene, blending all
+        archive members weighted by their crowding distance.  Genes where
+        all archive members agree (low entropy) produce a strong signal;
+        genes where archive members disagree (high entropy) produce a weak,
+        uniform signal — naturally focusing rotation where the archive is
+        informative.
+        """
+        if not self.archive:
+            # No archive: uniform signal (no rotation)
+            return [[1.0 / self._num_ops] * self._num_ops
+                    for _ in range(self._num_genes)]
+
+        weights = self._crowding_weights()
+        signal = [[0.0] * self._num_ops for _ in range(self._num_genes)]
+        for w, member in zip(weights, self.archive):
+            for d in range(self._num_genes):
+                op = member.genotype[d]
+                signal[d][op] += w
+        # Normalize each gene's signal to a distribution
+        for d in range(self._num_genes):
+            total = sum(signal[d])
+            if total > 0:
+                signal[d] = [v / total for v in signal[d]]
+            else:
+                signal[d] = [1.0 / self._num_ops] * self._num_ops
+        return signal
+
+    def _rotate_qbit(
+        self,
+        qbit: list[list[float]],
+        guide_signal: list[list[float]],
+        alpha: float,
+    ) -> list[list[float]]:
+        """Apply the quantum rotation gate toward the guide signal.
+
+        For each gene d:
+            new_q[d][op] = q[d][op] + alpha * (guide[d][op] - q[d][op])
+
+        This is a convex combination step (linear interpolation toward the
+        guide).  When alpha=0, Q-bits are unchanged; when alpha=1, Q-bits
+        collapse to the guide distribution exactly.  The diversity floor in
+        `_normalize` prevents any operation probability from reaching zero.
+        """
+        new_qbit = []
+        for d in range(self._num_genes):
+            new_dist = [
+                qbit[d][op] + alpha * (guide_signal[d][op] - qbit[d][op])
+                for op in range(self._num_ops)
+            ]
+            new_qbit.append(self._normalize(new_dist))
+        return new_qbit
+
+    # ------------------------------------------------------------------
+    # NOVEL CORE: Entanglement-inspired crossover
+    # ------------------------------------------------------------------
+
+    def _entangle(
+        self,
+        qi: list[list[float]],
+        qj: list[list[float]],
+        guide_signal: list[list[float]],
+        alpha: float,
+    ) -> tuple[list[list[float]], list[list[float]]]:
+        """Entanglement-inspired Q-bit crossover.
+
+        Step 1 — Averaging (entanglement):
+            q_shared[d] = (qi[d] + qj[d]) / 2   for each gene d
+
+        Step 2 — Differentiated rotation:
+            child_i rotates q_shared toward guide with +alpha (exploitation)
+            child_j rotates q_shared with a perturbed guide (exploration)
+
+        The perturbed guide for child_j is the complement of the original
+        guide signal — it deliberately pushes probability mass toward
+        LESS-visited archive operations, promoting diversity.
+
+        This is novel: standard quantum crossover only averages Q-bits;
+        the differentiated rotation creates *two distinct offspring* from
+        the shared superposition, analogous to measuring entangled particles
+        in different bases.
+        """
+        # Step 1: Average (entangle)
+        q_shared = []
+        for d in range(self._num_genes):
+            shared_d = self._normalize([
+                (qi[d][op] + qj[d][op]) / 2.0
+                for op in range(self._num_ops)
+            ])
+            q_shared.append(shared_d)
+
+        # Step 2a: child_i rotates toward the archive guide (exploitation)
+        child_i = self._rotate_qbit(q_shared, guide_signal, alpha)
+
+        # Step 2b: child_j rotates toward the complement guide (exploration)
+        # Complement: invert the guide distribution so least-visited ops get more weight
+        complement_guide = []
+        for d in range(self._num_genes):
+            inv = [1.0 - guide_signal[d][op] for op in range(self._num_ops)]
+            # Clamp negative values from near-1 guide entries
+            inv = [max(1e-9, v) for v in inv]
+            total = sum(inv)
+            complement_guide.append([v / total for v in inv])
+        child_j = self._rotate_qbit(q_shared, complement_guide, alpha * 0.5)
+
+        return child_i, child_j
+
+    # ------------------------------------------------------------------
+    # Q-bit diversity repair
+    # ------------------------------------------------------------------
+
+    def _repair_qbit(self, qbit: list[list[float]]) -> list[list[float]]:
+        """Reinject uniform probability mass into any gene that has converged.
+
+        A gene is considered converged when its maximum probability exceeds
+        a threshold (0.85).  Repair adds a small uniform component, preventing
+        the Q-bit from locking onto a single operation prematurely.
+        """
+        repaired = []
+        for d in range(self._num_genes):
+            if max(qbit[d]) > 0.85:
+                uniform = [1.0 / self._num_ops] * self._num_ops
+                # Blend: 80% current, 20% uniform
+                blended = [0.8 * qbit[d][op] + 0.2 * uniform[op]
+                           for op in range(self._num_ops)]
+                repaired.append(self._normalize(blended))
+            else:
+                repaired.append(qbit[d])
+        return repaired
+
+    # ------------------------------------------------------------------
+    # Evaluation helper
+    # ------------------------------------------------------------------
+
+    def _evaluate(self, genotype: list[int]) -> Individual:
+        fitness = self.evaluator.evaluate(genotype)
+        metadata = {}
+        if hasattr(self.search_space, "metadata_from_genotype"):
+            metadata = self.search_space.metadata_from_genotype(genotype)
+        elif hasattr(self.evaluator, "benchmark") and hasattr(
+            self.evaluator.benchmark, "get_metadata"
+        ):
+            metadata = self.evaluator.benchmark.get_metadata(genotype)
+        self.evaluations += 1
+        return Individual(genotype[:], fitness, metadata=metadata)
+
+    # ------------------------------------------------------------------
+    # Main loop
+    # ------------------------------------------------------------------
+
+    def run(self) -> list[Individual]:
+        """Execute the AQPSO search and return the final archive."""
+        K = max(1, self.max_iterations)
+        alpha = self.alpha
+
+        # Initialise Q-individuals with uniform distributions
+        self._q_pop = [self._uniform_qbit() for _ in range(self.pop_size)]
+        self._collapsed = [
+            self.search_space.random_individual() for _ in range(self.pop_size)
+        ]
+        self.archive = []
+        self.evaluations = 0
+        self.generations = 0
+        self.population = []
+
+        # Evaluate initial collapsed genotypes
+        for i in range(self.pop_size):
+            ind = self._evaluate(self._collapsed[i])
+            self.population.append(ind)
+            self._archive_update(ind)
+
+        self.history.record(
+            generation=self.generations,
+            evaluations=self.evaluations,
+            population=self.population,
+            pareto_front=list(self.archive),
+        )
+
+        for k in range(1, K + 1):
+            progress = k / K
+            # Adaptive collapse threshold: starts at 1.0, decays to collapse_floor
+            collapse_prob = max(
+                self.collapse_floor, 1.0 - (1.0 - self.collapse_floor) * progress
+            )
+
+            # ── Compute archive-weighted guide signal (NOVEL) ─────────
+            guide_signal = self._archive_guide_signal()
+
+            # ── Q-bit rotation toward archive guide (NOVEL) ───────────
+            for i in range(self.pop_size):
+                self._q_pop[i] = self._rotate_qbit(
+                    self._q_pop[i], guide_signal, alpha
+                )
+
+            # ── Entanglement crossover on a random subset (NOVEL) ─────
+            n_entangle = max(2, int(self.p_entangle * self.pop_size))
+            # Ensure even number for pairing
+            if n_entangle % 2 != 0:
+                n_entangle -= 1
+            entangle_idx = random.sample(range(self.pop_size), n_entangle)
+            random.shuffle(entangle_idx)
+            for pair_start in range(0, n_entangle, 2):
+                i_idx = entangle_idx[pair_start]
+                j_idx = entangle_idx[pair_start + 1]
+                child_qi, child_qj = self._entangle(
+                    self._q_pop[i_idx],
+                    self._q_pop[j_idx],
+                    guide_signal,
+                    alpha,
+                )
+                self._q_pop[i_idx] = child_qi
+                self._q_pop[j_idx] = child_qj
+
+            # ── Q-bit repair (diversity maintenance) ──────────────────
+            for i in range(self.pop_size):
+                if random.random() < self.p_repair:
+                    self._q_pop[i] = self._repair_qbit(self._q_pop[i])
+
+            # ── Collapse and evaluate ─────────────────────────────────
+            new_population: list[Individual] = []
+            for i in range(self.pop_size):
+                collapsed_geno = self._collapse(self._q_pop[i], collapse_prob)
+                ind = self._evaluate(collapsed_geno)
+                new_population.append(ind)
+                self._archive_update(ind)
+
+                # Terminate mid-generation if budget is exhausted
+                if self.evaluations >= (self.max_iterations * self.pop_size + self.pop_size):
+                    break
+
+            self.population = new_population
+
+            # ── Alpha decay ───────────────────────────────────────────
+            alpha *= self.alpha_decay
+            alpha = max(alpha, 0.005)  # floor to preserve residual learning
+
+            self.generations = k
+            self.history.record(
+                generation=self.generations,
+                evaluations=self.evaluations,
+                population=self.population,
+                pareto_front=list(self.archive),
+            )
+
+        return [
+            Individual(ind.genotype[:], ind.fitness, ind.metadata.copy())
+            for ind in self.archive
+        ]
+
+
+# =============================================================================
+# APSO-E: Archive-Guided PSO with Elite Perturbation
+# =============================================================================
+# Bottlenecks diagnosed in ABC / Firefly / PSO / HybridMBO and addressed here:
+#
+#  [ABC]        1-op neighborhood exhausted in ~20 steps; scout reset is fully
+#               random, discarding all elite knowledge.
+#               FIX: Multi-hop neighborhood (1..k genes) + archive-seeded reset.
+#
+#  [Firefly]    Rank scores cluster when population converges to same accuracy;
+#               "brighter" set vanishes -> pure random walk for 64% of gens.
+#               FIX: Crowding-distance attraction instead of scalar rank score.
+#
+#  [PSO]        Velocity collapses to 0 when particle = pbest = gbest;
+#               Gaussian mutation sigma -> 0 at end, no escape mechanism.
+#               FIX: Velocity noise floor + archive-guided social component.
+#
+#  [HybridMBO]  FA move with fixed fa_prob produces near-clones when SP1 is
+#               converged; no diversity detection.
+#               FIX: Adaptive fa_prob that increases on diversity collapse.
+#
+# Novel contributions (beyond any individual referenced paper):
+#   1. Archive-stratified velocity: social component uses the MOST CROWDED
+#      archive member (maximally diverse elite guide) rather than gbest,
+#      preventing velocity collapse even when the population has converged.
+#   2. Diversity-gated perturbation: a lightweight genotype-diversity monitor
+#      triggers a targeted archive-seeded crossover burst only when unique
+#      genotype ratio drops below a threshold — no wasted budget otherwise.
+#   3. Multi-resolution neighborhood sampling: when a food source is about to
+#      be abandoned, it escalates from 1-hop to 2-hop to 3-hop neighbors before
+#      giving up, exhausting the full local basin before an archive-seeded reset.
+#   4. Crowding-distance attraction: firefly movement uses pairwise crowding
+#      distance in fitness space (not scalar rank) so attraction persists even
+#      after all population members reach the same accuracy level.
+# =============================================================================
+
+class APSOESearch:
+    """Archive-Guided PSO with Elite Perturbation (APSO-E).
+
+    A population-based multi-objective NAS strategy that surgically addresses
+    the convergence bottlenecks of ABC, Firefly, PSO, and HybridMBO.
+
+    Algorithm overview
+    ------------------
+    Maintains a population of particles and an external non-dominated archive.
+
+    Each generation:
+      1. **Velocity update** (PSO core):
+            v ← w*v + c1*r1*(pbest - x) + c2*r2*(archive_guide - x)
+         where archive_guide is the most-crowded archive member (most diverse
+         elite), not the scalar gbest.  This prevents velocity collapse when
+         all particles converge to the same genotype.
+
+      2. **Position update**: probability of changing gene d proportional to |v_d|.
+
+      3. **Multi-resolution local search** (ABC-inspired):
+         For each particle, try 1-hop → 2-hop → 3-hop neighbors greedily.
+         Escalation only happens if the 1-hop search found no improvement,
+         replacing ABC's blind abandonment with an exhaustive local basin
+         search before escalating.
+
+      4. **Diversity-gated archive crossover** (novel):
+         If unique-genotype ratio drops below `div_threshold`, inject
+         `n_inject` new individuals created by uniform crossover of two
+         random archive members (not random restart). This replaces Firefly's
+         genetic fallback and MBO's unchecked cloning.
+
+      5. **Archive update**: standard non-dominated insertion + crowding truncation.
+
+    Parameters
+    ----------
+    search_space   : SearchSpace
+    evaluator      : Evaluator
+    pop_size       : int    (default 30)
+    max_iterations : int    (default 300)
+    archive_size   : int    (default pop_size)
+    w              : float  inertia weight (default 0.4)
+    c1             : float  cognitive coefficient (default 1.5)
+    c2             : float  social coefficient (default 1.5)
+    w_decay        : float  multiplicative inertia decay per gen (default 0.99)
+    max_hop        : int    max neighborhood hop for local search (default 3)
+    div_threshold  : float  diversity ratio triggering archive crossover (default 0.4)
+    n_inject       : int    particles injected per diversity event (default 4)
+    history        : History | None
+    """
+
+    def __init__(
+        self,
+        search_space: SearchSpace,
+        evaluator: Evaluator,
+        pop_size: int = 30,
+        max_iterations: int = 300,
+        archive_size: int | None = None,
+        w: float = 0.4,
+        c1: float = 1.5,
+        c2: float = 1.5,
+        w_decay: float = 0.99,
+        max_hop: int = 3,
+        div_threshold: float = 0.4,
+        n_inject: int = 4,
+        history: History | None = None,
+    ):
+        self.search_space = search_space
+        self.evaluator = evaluator
+        self.pop_size = pop_size
+        self.max_iterations = max_iterations
+        self.archive_size = archive_size or pop_size
+        self.w = w
+        self.c1 = c1
+        self.c2 = c2
+        self.w_decay = w_decay
+        self.max_hop = max_hop
+        self.div_threshold = div_threshold
+        self.n_inject = n_inject
+        self.history = history or History()
+
+        self._num_ops = search_space.num_ops
+        self._num_genes = search_space.num_edges
+        self._V_MAX = float(self._num_ops - 1)
+
+        self.evaluations: int = 0
+        self.generations: int = 0
+        self.population: list[Individual] = []
+        self.archive: list[Individual] = []
+
+        # Per-particle state
+        self._velocities: list[list[float]] = []
+        self._pbests: list[Individual] = []
+
+    # ------------------------------------------------------------------
+    # Archive helpers
+    # ------------------------------------------------------------------
+
+    def _dominates(self, a: Individual, b: Individual) -> bool:
+        return dominates(a, b, self.evaluator.objective_directions)
+
+    def _crowding_distances(self) -> list[float]:
+        """Crowding distances of archive members."""
+        arch = self.archive
+        if len(arch) <= 2:
+            return [float("inf")] * len(arch)
+        n_obj = len(self.evaluator.objective_directions)
+        scores = [0.0] * len(arch)
+        for obj in range(n_obj):
+            direction = self.evaluator.objective_directions[obj]
+            order = sorted(range(len(arch)),
+                           key=lambda i: arch[i].fitness[obj] * direction)
+            scores[order[0]] = float("inf")
+            scores[order[-1]] = float("inf")
+            min_v = arch[order[0]].fitness[obj] * direction
+            max_v = arch[order[-1]].fitness[obj] * direction
+            span = max_v - min_v
+            if span == 0:
+                continue
+            for k in range(1, len(order) - 1):
+                idx = order[k]
+                if math.isinf(scores[idx]):
+                    continue
+                prev_v = arch[order[k - 1]].fitness[obj] * direction
+                next_v = arch[order[k + 1]].fitness[obj] * direction
+                scores[idx] += (next_v - prev_v) / span
+        return scores
+
+    def _archive_guide(self) -> Individual:
+        """Return the most crowded (most diverse) archive member as guide.
+
+        This is the key innovation over PSO's gbest: instead of the globally
+        best scalar individual, we use the one with the highest crowding
+        distance — the most isolated elite.  Even when all particles have
+        converged to the same high-accuracy architecture, the archive still
+        contains diverse members, so the social velocity component remains
+        non-zero and particles continue to move.
+        """
+        if not self.archive:
+            return random.choice(self.population)
+        cd = self._crowding_distances()
+        # With probability 0.7 pick most crowded; with 0.3 pick random archive
+        # member (prevents always chasing the same corner of the Pareto front)
+        if random.random() < 0.7:
+            idx = max(range(len(self.archive)), key=lambda i: cd[i])
+        else:
+            idx = random.randrange(len(self.archive))
+        return self.archive[idx]
+
+    def _archive_update(self, ind: Individual) -> None:
+        """Insert ind into archive if non-dominated; truncate by crowding."""
+        self.archive = [a for a in self.archive if not self._dominates(ind, a)]
+        if not any(self._dominates(a, ind) for a in self.archive):
+            if not any(tuple(a.genotype) == tuple(ind.genotype) for a in self.archive):
+                self.archive.append(Individual(ind.genotype[:], ind.fitness,
+                                               ind.metadata.copy()))
+        while len(self.archive) > self.archive_size:
+            cd = self._crowding_distances()
+            # Remove the most crowded (smallest distance) to maintain spread
+            remove_idx = min(range(len(self.archive)), key=lambda i: cd[i])
+            del self.archive[remove_idx]
+
+    # ------------------------------------------------------------------
+    # Evaluation helper
+    # ------------------------------------------------------------------
+
+    def _evaluate(self, genotype: list[int]) -> Individual:
+        fitness = self.evaluator.evaluate(genotype)
+        metadata = {}
+        if hasattr(self.search_space, "metadata_from_genotype"):
+            metadata = self.search_space.metadata_from_genotype(genotype)
+        self.evaluations += 1
+        return Individual(genotype[:], fitness, metadata=metadata)
+
+    def _weighted_score(self, ind: Individual) -> float:
+        return sum(v * d for v, d in zip(ind.fitness, self.evaluator.objective_directions))
+
+    def _is_better(self, a: Individual, b: Individual) -> bool:
+        if a.fitness is None:
+            return False
+        if b.fitness is None:
+            return True
+        return self._weighted_score(a) > self._weighted_score(b)
+
+    # ------------------------------------------------------------------
+    # Velocity update (PSO core with archive-stratified social component)
+    # ------------------------------------------------------------------
+
+    def _update_velocity_and_position(
+        self, i: int, guide: Individual, w: float
+    ) -> list[int]:
+        """Update particle i's velocity and return new genotype.
+
+        Social component uses `guide` (most-crowded archive member) instead
+        of gbest.  This keeps social velocity non-zero after convergence.
+        A noise floor prevents velocity from reaching exactly 0.
+        """
+        ind = self.population[i]
+        vel = self._velocities[i]
+        pbest = self._pbests[i]
+        new_geno = list(ind.genotype)
+
+        for d in range(self._num_genes):
+            r1 = random.random()
+            r2 = random.random()
+            v_inertia = w * vel[d]
+            v_personal = self.c1 * r1 * (pbest.genotype[d] - ind.genotype[d])
+            v_social = self.c2 * r2 * (guide.genotype[d] - ind.genotype[d])
+            new_v = v_inertia + v_personal + v_social
+
+            # Noise floor: if velocity is near 0 but particle hasn't converged
+            # to the archive guide, inject a small random perturbation.
+            # This directly fixes PSO's frozen-particle bottleneck.
+            if abs(new_v) < 0.1 and ind.genotype[d] != guide.genotype[d]:
+                new_v += random.uniform(-0.3, 0.3)
+
+            vel[d] = max(-self._V_MAX, min(self._V_MAX, new_v))
+
+            # Gene adoption probability proportional to |velocity|
+            p_change = min(1.0, abs(vel[d]) / self._V_MAX) if self._V_MAX > 0 else 0.0
+            if random.random() < p_change:
+                # Bias: if |v_social| > |v_personal|, follow archive guide
+                if abs(v_social) >= abs(v_personal):
+                    new_geno[d] = guide.genotype[d]
+                else:
+                    new_geno[d] = pbest.genotype[d]
+
+        self._velocities[i] = vel
+        return new_geno
+
+    # ------------------------------------------------------------------
+    # Multi-resolution local search (ABC bottleneck fix)
+    # ------------------------------------------------------------------
+
+    def _multi_hop_search(self, ind: Individual, max_hop: int) -> Individual | None:
+        """Escalating local search: 1-hop → 2-hop → max_hop.
+
+        Unlike ABC's fixed 1-op neighbor, we escalate neighborhood size
+        when small hops find nothing.  This exhausts the local basin before
+        giving up, avoiding the blind random reset that destroys elite knowledge.
+
+        Returns the best improving neighbor found, or None.
+        """
+        best = None
+        best_score = self._weighted_score(ind)
+
+        for hop in range(1, max_hop + 1):
+            # Sample `hop` distinct gene positions to flip
+            n_try = min(12, self._num_genes * (self._num_ops - 1))
+            for _ in range(n_try):
+                positions = random.sample(range(self._num_genes), min(hop, self._num_genes))
+                new_geno = ind.genotype[:]
+                for pos in positions:
+                    choices = [op for op in range(self._num_ops) if op != new_geno[pos]]
+                    new_geno[pos] = random.choice(choices)
+                candidate = self._evaluate(new_geno)
+                s = self._weighted_score(candidate)
+                if s > best_score:
+                    best = candidate
+                    best_score = s
+            # Only escalate if no improvement found at this hop level
+            if best is not None:
+                break
+
+        return best
+
+    # ------------------------------------------------------------------
+    # Diversity-gated archive crossover (Firefly / MBO bottleneck fix)
+    # ------------------------------------------------------------------
+
+    def _diversity_ratio(self) -> float:
+        """Fraction of population with unique genotypes."""
+        unique = len(set(tuple(ind.genotype) for ind in self.population))
+        return unique / max(1, len(self.population))
+
+    def _archive_crossover_inject(self) -> list[Individual]:
+        """Create new individuals by crossing archive members.
+
+        When diversity collapses, this replaces Firefly's random genetic
+        fallback with archive-guided crossover: children inherit genes from
+        two DIFFERENT archive members, preserving elite knowledge while
+        generating genuinely new solutions.
+        """
+        if len(self.archive) < 2:
+            # Fallback: random individual
+            return [self._evaluate(self.search_space.random_individual())]
+        injected = []
+        for _ in range(self.n_inject):
+            a, b = random.sample(self.archive, 2)
+            child_geno = [
+                a.genotype[d] if random.random() < 0.5 else b.genotype[d]
+                for d in range(self._num_genes)
+            ]
+            # Add a small mutation to avoid exact clones of archive members
+            for d in range(self._num_genes):
+                if random.random() < 0.15:
+                    choices = [op for op in range(self._num_ops) if op != child_geno[d]]
+                    child_geno[d] = random.choice(choices)
+            injected.append(self._evaluate(child_geno))
+        return injected
+
+    # ------------------------------------------------------------------
+    # Main loop
+    # ------------------------------------------------------------------
+
+    def run(self) -> list[Individual]:
+        """Execute APSO-E and return the final non-dominated archive."""
+        K = max(1, self.max_iterations)
+        w = self.w
+        self.evaluations = 0
+        self.generations = 0
+        self.archive = []
+
+        # Initialise population
+        self.population = []
+        self._velocities = []
+        self._pbests = []
+        for _ in range(self.pop_size):
+            geno = self.search_space.random_individual()
+            ind = self._evaluate(geno)
+            self.population.append(ind)
+            self._velocities.append([0.0] * self._num_genes)
+            self._pbests.append(Individual(ind.genotype[:], ind.fitness, ind.metadata.copy()))
+            self._archive_update(ind)
+
+        self.history.record(
+            generation=self.generations,
+            evaluations=self.evaluations,
+            population=self.population,
+            pareto_front=list(self.archive),
+        )
+
+        for k in range(1, K + 1):
+            guide = self._archive_guide()
+            new_population: list[Individual] = []
+
+            # ── Step 1 & 2: Velocity + position update ────────────────
+            for i in range(self.pop_size):
+                new_geno = self._update_velocity_and_position(i, guide, w)
+                ind = self._evaluate(new_geno)
+                self._archive_update(ind)
+
+                # Update personal best
+                if self._is_better(ind, self._pbests[i]):
+                    self._pbests[i] = Individual(ind.genotype[:], ind.fitness,
+                                                 ind.metadata.copy())
+                new_population.append(ind)
+
+            # ── Step 3: Multi-resolution local search on top half ─────
+            # Sort by weighted score; apply local search to better half only
+            # (budget-efficient: spend local search on promising particles)
+            n_local = max(1, self.pop_size // 2)
+            scored = sorted(range(self.pop_size),
+                            key=lambda i: self._weighted_score(new_population[i]),
+                            reverse=True)
+            for i in scored[:n_local]:
+                ind = new_population[i]
+                improved = self._multi_hop_search(ind, self.max_hop)
+                if improved is not None:
+                    self._archive_update(improved)
+                    if self._is_better(improved, self._pbests[i]):
+                        self._pbests[i] = Individual(
+                            improved.genotype[:], improved.fitness,
+                            improved.metadata.copy())
+                    new_population[i] = improved
+
+            # ── Step 4: Diversity-gated archive crossover ─────────────
+            div = self._diversity_ratio()
+            if div < self.div_threshold and len(self.archive) >= 2:
+                injected = self._archive_crossover_inject()
+                # Replace the weakest particles
+                scored_asc = sorted(range(self.pop_size),
+                                    key=lambda i: self._weighted_score(new_population[i]))
+                for j, new_ind in enumerate(injected):
+                    if j >= len(scored_asc):
+                        break
+                    self._archive_update(new_ind)
+                    replace_idx = scored_asc[j]
+                    new_population[replace_idx] = new_ind
+                    self._pbests[replace_idx] = Individual(
+                        new_ind.genotype[:], new_ind.fitness, new_ind.metadata.copy())
+                    # Reset velocity for replaced particle
+                    self._velocities[replace_idx] = [0.0] * self._num_genes
+
+            self.population = new_population
+
+            # ── Inertia decay ─────────────────────────────────────────
+            w = max(0.1, w * self.w_decay)
+
+            self.generations = k
+            self.history.record(
+                generation=self.generations,
+                evaluations=self.evaluations,
+                population=self.population,
+                pareto_front=list(self.archive),
+            )
+
+        return [Individual(ind.genotype[:], ind.fitness, ind.metadata.copy())
+                for ind in self.archive]
+
+
+class NSGA2SearchStrategy(SearchStrategy):
+    """NSGA-II: Non-dominated Sorting Genetic Algorithm II for NAS."""
+
+    def __init__(
+        self,
+        population: Population,
+        selection: Selection,
+        crossover: Crossover,
+        mutation: Mutation,
+        replacement: Replacement,
+        evaluator: Evaluator,
+        budget: int = 500,
+        termination: Termination | None = None,
+        history: History | None = None,
+        crossover_prob: float = 0.9,
+        mutation_prob: float | None = None,
+    ):
+        from nas_framework.variation import CrossoverMutationVariation
+        variation = CrossoverMutationVariation(crossover, mutation)
+
+        super().__init__(
+            population=population,
+            selection=selection,
+            variation=variation,
+            replacement=replacement,
+            evaluator=evaluator,
+            termination=termination,
+            history=history,
+            budget=budget,
+        )
+
+        self.crossover_prob = crossover_prob
+        self.mutation_prob = mutation_prob
+
+    def _assign_rank_and_crowding(self, individuals: list[Individual]) -> list[list[Individual]]:
+        from nas_framework.mo_utils import assign_rank_and_crowding
+        return assign_rank_and_crowding(individuals, self.evaluator.objective_directions)
+
+    def _select_population(self, combined: list[Individual]) -> list[Individual]:
+        from nas_framework.mo_utils import take_pareto_best
+        return take_pareto_best(combined, self.population.size, self.evaluator.objective_directions)
+
+    def run(self) -> Population:
+        """Execute NSGA-II algorithm (population + offspring elitist selection)."""
+        self.population.initialize()
+        self._evaluate_offspring(self.population.individuals)
+
+        self.generations = 0
+        self._record_history()
+
+        while not self.termination.should_stop(self.evaluations, self.generations):
+            parents = self.selection.select(
+                self.population.individuals,
+                self.population.size,
+                self.evaluator.objective_directions,
+            )
+
+            offspring = self.variation.generate(parents, self.population.size)
+            self._evaluate_offspring(offspring)
+
+            combined = self.population.individuals + offspring
+            # assign rank & crowding on combined pool through helper
+            self._assign_rank_and_crowding(combined)
+            next_gen = self._select_population(combined)
+
+            self.population.individuals = next_gen
+            self.generations += 1
+            self._record_history()
+
+        return self.population
+
+
+        

@@ -22,7 +22,7 @@ from nas_framework.mutation import SinglePointMutation, GaussianMutation, ABCNei
 from nas_framework.population import Individual, Population, PSOPopulation, ABCPopulation
 from nas_framework.replacement import ElitistReplacement, CrowdingReplacement, RankBasedReplacement
 from nas_framework.search_space import CSVSearchSpace
-from nas_framework.search_strategy import BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch, MOSHOSearch, PSOSearchStrategy, ABCSearchStrategy, FireflySearchStrategy, HybridMBOStrategy, DEANSSearchStrategy, ACOLSSearchStrategy
+from nas_framework.search_strategy import BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch, MOSHOSearch, PSOSearchStrategy, ABCSearchStrategy, FireflySearchStrategy, HybridMBOStrategy, DEANSSearchStrategy, ACOLSSearchStrategy, AQPSOSearch, APSOESearch, NSGA2SearchStrategy
 from nas_framework.selection import TournamentSelection, RouletteWheelSelection
 from utilities.metrics import c_metric, hypervolume_2d, normalized_hypervolume_2d, igd_plus, non_dominated
 from utilities.plotting import (
@@ -91,17 +91,17 @@ def _build_strategy(
         return MOWSOSearch(
             search_space=search_space,
             evaluator=evaluator,
-            pop_size=50,
-            max_iterations=300,
-            archive_size=50,
+            pop_size=pop_size,
+            max_iterations=max(1, budget // pop_size),
+            archive_size=pop_size,
         )
     if method == "mosho":
         return MOSHOSearch(
             search_space=search_space,
             evaluator=evaluator,
-            pop_size=50,
-            max_iterations=300,
-            archive_size=50,
+            pop_size=pop_size,
+            max_iterations=max(1, budget // pop_size),
+            archive_size=pop_size,
         )
     if method == "pso":
         population = PSOPopulation(search_space, evaluator, size=pop_size, w=0.4)
@@ -177,6 +177,45 @@ def _build_strategy(
             archive_size=pop_size,
             neighborhood_size=2,
             adaptation_rate=0.1,
+        )
+    if method == "aqpso":
+        return AQPSOSearch(
+            search_space=search_space,
+            evaluator=evaluator,
+            pop_size=pop_size,
+            max_iterations=max(1, budget // pop_size),
+            archive_size=pop_size,
+            alpha=0.05,
+            alpha_decay=0.995,
+            collapse_floor=0.3,
+            p_entangle=0.4,
+            p_repair=0.2,
+            diversity_floor=0.05,
+        )
+    if method == "apso_e":
+        return APSOESearch(
+            search_space=search_space,
+            evaluator=evaluator,
+            pop_size=pop_size,
+            max_iterations=max(1, budget // pop_size),
+            archive_size=pop_size,
+            w=0.4,
+            c1=1.5,
+            c2=1.5,
+            w_decay=0.99,
+            max_hop=3,
+            div_threshold=0.4,
+            n_inject=4,
+        )
+    if method == "nsga2":
+        return NSGA2SearchStrategy(
+            population=Population(search_space, evaluator, size=pop_size),
+            selection=TournamentSelection(k=2),
+            crossover=UniformCrossover(),
+            mutation=SinglePointMutation(search_space),
+            replacement=RankBasedReplacement(w_perf=0.6),
+            evaluator=evaluator,
+            budget=budget,
         )
     raise ValueError(f"Unknown method: {method}")
 
@@ -490,7 +529,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--method",
-        choices=["random", "bruteforce", "skyline", "mowso", "mosho", "pso", "abc", "firefly", "hybrid_mbo", "deans", "aco_ls"],
+        choices=["random", "bruteforce", "skyline", "mowso", "mosho", "pso", "abc", "firefly", "hybrid_mbo", "deans", "aco_ls", "aqpso", "apso_e", "nsga2"],
         default="random",
         help="Search strategy method to analyze.",
     )
