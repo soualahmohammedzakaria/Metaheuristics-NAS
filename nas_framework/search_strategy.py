@@ -1921,954 +1921,6 @@ class MBOSearchStrategy(SearchStrategy):
         return self.population
 
 
-class DEANSSearchStrategy(SearchStrategy):
-    """Hybrid Differential Evolution with Adaptive Neighborhood Search (DEANS).
-
-    A novel population-based strategy combining:
-    - Differential Evolution (DE) for global exploration
-    - Adaptive Neighborhood Search (ANS) for local exploitation
-    - External archive for elite solution storage
-    - Rank-based selection and replacement
-
-    DE mutation adapted for discrete NAS space using genotype differences.
-    ANS adapts neighborhood size based on recent improvement success rate.
-    Archive maintains diverse elite solutions for guidance.
-
-    Parameters
-    ----------
-    population : Population
-    evaluator : Evaluator
-    budget : int
-    F : float - DE mutation scaling factor (default 0.8)
-    CR : float - DE crossover rate (default 0.9)
-    archive_size : int - External archive size (default pop_size)
-    neighborhood_size : int - Initial neighborhood size for ANS (default 3)
-    adaptation_rate : float - How quickly ANS adapts (default 0.1)
-    """
-
-    def __init__(self,
-                 population: Population,
-                 evaluator: Evaluator,
-                 budget: int = 500,
-                 F: float = 0.8,
-                 CR: float = 0.9,
-                 archive_size: int | None = None,
-                 neighborhood_size: int = 3,
-                 adaptation_rate: float = 0.1,
-                 termination: Termination | None = None,
-                 history: History | None = None):
-
-        # DEANS doesn't use standard selection/variation/replacement
-        # It implements its own DE-based operators
-        super().__init__(population, None, None, None, evaluator,
-                         termination=termination, history=history, budget=budget)
-
-        self.F = F
-        self.CR = CR
-        self.archive_size = archive_size or population.size
-        self.neighborhood_size = neighborhood_size
-        self.adaptation_rate = adaptation_rate
-
-        self.archive: list[Individual] = []
-        self.improvement_history: list[bool] = []
-        self.history_window = 10
-
-    def _dominates(self, a: Individual, b: Individual) -> bool:
-        """Check if a dominates b."""
-        return dominates(a, b, self.evaluator.objective_directions)
-
-    def _genotype_difference(self, a: list[int], b: list[int]) -> list[int]:
-        """Compute discrete difference vector for DE mutation."""
-        return [x - y for x, y in zip(a, b)]
-
-    def _genotype_add(self, base: list[int], diff: list[int]) -> list[int]:
-        """Add difference vector to base genotype (discrete)."""
-        result = []
-        for i, (b, d) in enumerate(zip(base, diff)):
-            # For discrete space, use modular arithmetic within operation bounds
-            new_val = (b + d) % self.population.search_space.num_ops
-            result.append(new_val)
-        return result
-
-    def _de_mutation(self, target: Individual, population: list[Individual]) -> list[int]:
-        """DE/rand/1 mutation adapted for discrete space."""
-        # Select three distinct random individuals
-        candidates = [ind for ind in population if ind != target]
-        if len(candidates) < 3:
-            # Fallback to random if not enough candidates
-            return self.population.search_space.random_individual()
-
-        r1, r2, r3 = random.sample(candidates, 3)
-
-        # Compute difference vector: r1 - r2
-        diff = self._genotype_difference(r1.genotype, r2.genotype)
-
-        # Scale by F and add to r3: r3 + F*(r1 - r2)
-        scaled_diff = [int(self.F * d) for d in diff]
-        mutant = self._genotype_add(r3.genotype, scaled_diff)
-
-        # Ensure bounds
-        mutant = [max(0, min(self.population.search_space.num_ops - 1, x)) for x in mutant]
-
-        return mutant
-
-    def _binomial_crossover(self, target: list[int], mutant: list[int]) -> list[int]:
-        """Binomial crossover for DE."""
-        trial = list(target)
-        j_rand = random.randint(0, len(target) - 1)
-
-        for j in range(len(target)):
-            if random.random() < self.CR or j == j_rand:
-                trial[j] = mutant[j]
-
-        return trial
-
-    def _neighborhood_search(self, individual: Individual, neighborhood_size: int) -> Individual:
-        """Perform local neighborhood search by flipping genes."""
-        genotype = list(individual.genotype)
-        genes_to_flip = random.sample(range(len(genotype)), min(neighborhood_size, len(genotype)))
-
-        for gene_idx in genes_to_flip:
-            # Flip to a different random operation
-            current_op = genotype[gene_idx]
-            available_ops = [op for op in range(self.population.search_space.num_ops) if op != current_op]
-            if available_ops:
-                genotype[gene_idx] = random.choice(available_ops)
-
-        return Individual(genotype)
-
-    def _update_archive(self, candidate: Individual) -> None:
-        """Update external archive with non-dominated solutions."""
-        # Remove dominated solutions
-        self.archive = [arch for arch in self.archive if not self._dominates(candidate, arch)]
-
-        # Add candidate if not dominated by any archive member
-        dominated = any(self._dominates(arch, candidate) for arch in self.archive)
-        if not dominated:
-            self.archive.append(Individual(candidate.genotype[:], candidate.fitness, candidate.metadata.copy()))
-
-        # Truncate archive if too large
-        if len(self.archive) > self.archive_size:
-            # Remove most crowded solution (simplified crowding distance)
-            crowding_distances = []
-            for i, ind_i in enumerate(self.archive):
-                distances = []
-                for j, ind_j in enumerate(self.archive):
-                    if i != j:
-                        dist = sum((a - b) ** 2 for a, b in zip(ind_i.fitness, ind_j.fitness)) ** 0.5
-                        distances.append(dist)
-                crowding_distances.append(sum(distances) if distances else 0)
-
-            # Remove individual with smallest crowding distance
-            remove_idx = crowding_distances.index(min(crowding_distances))
-            del self.archive[remove_idx]
-
-    def _adapt_neighborhood_size(self) -> int:
-        """Adapt neighborhood size based on recent improvement success."""
-        if len(self.improvement_history) < self.history_window:
-            return self.neighborhood_size
-
-        success_rate = sum(self.improvement_history[-self.history_window:]) / self.history_window
-
-        if success_rate > 0.6:
-            # High success - increase exploration
-            new_size = min(self.neighborhood_size + 1, self.population.search_space.num_edges)
-        elif success_rate < 0.3:
-            # Low success - decrease exploration, focus on exploitation
-            new_size = max(self.neighborhood_size - 1, 1)
-        else:
-            new_size = self.neighborhood_size
-
-        # Smooth adaptation
-        self.neighborhood_size = int(self.adaptation_rate * new_size + (1 - self.adaptation_rate) * self.neighborhood_size)
-        self.neighborhood_size = max(1, min(self.neighborhood_size, self.population.search_space.num_edges))
-
-        return self.neighborhood_size
-
-    def run(self) -> Population:
-        """Execute DEANS search strategy."""
-        self.population.initialize()
-        self.evaluations = len(self.population)
-        self.generations = 0
-        self.archive = []
-        self.improvement_history = []
-
-        # Initialize archive with initial population
-        for ind in self.population.individuals:
-            self._update_archive(ind)
-
-        self._record_history()
-
-        while not self.termination.should_stop(self.evaluations, self.generations):
-            offspring = []
-            improved_this_gen = False
-
-            # Adapt neighborhood size
-            current_neighborhood_size = self._adapt_neighborhood_size()
-
-            for target in self.population.individuals:
-                if self.termination.should_stop(self.evaluations, self.generations):
-                    break
-
-                # DE mutation and crossover
-                mutant_genotype = self._de_mutation(target, self.population.individuals)
-                trial_genotype = self._binomial_crossover(target.genotype, mutant_genotype)
-
-                # Create trial individual
-                trial = Individual(trial_genotype)
-                trial.fitness = self.evaluator.evaluate(trial_genotype)
-                if hasattr(self.population.search_space, "metadata_from_genotype"):
-                    trial.metadata = self.population.search_space.metadata_from_genotype(trial_genotype)
-                self.evaluations += 1
-
-                # Selection: keep better individual
-                if self._dominates(trial, target):
-                    offspring.append(trial)
-                    improved_this_gen = True
-                    self._update_archive(trial)
-                else:
-                    offspring.append(target)
-
-                # Adaptive local search with probability based on improvement
-                if random.random() < 0.3:  # 30% chance for local search
-                    local_candidate = self._neighborhood_search(target, current_neighborhood_size)
-                    local_candidate.fitness = self.evaluator.evaluate(local_candidate.genotype)
-                    if hasattr(self.population.search_space, "metadata_from_genotype"):
-                        local_candidate.metadata = self.population.search_space.metadata_from_genotype(local_candidate.genotype)
-                    self.evaluations += 1
-
-                    if self._dominates(local_candidate, target):
-                        # Replace target with local improvement
-                        offspring[-1] = local_candidate
-                        improved_this_gen = True
-                        self._update_archive(local_candidate)
-
-            # Update population
-            self.population.individuals = offspring
-
-            # Record improvement
-            self.improvement_history.append(improved_this_gen)
-
-            self.generations += 1
-            self._record_history()
-
-        return self.population
-
-
-class ACOLSSearchStrategy(SearchStrategy):
-    """Ant Colony Optimization with Local Search (ACO-LS) for NAS.
-
-    A population-based strategy inspired by ant foraging behavior:
-    - Ants construct genotypes probabilistically using pheromone trails
-    - Local search refines solutions adaptively
-    - External archive maintains elite solutions
-    - Pheromone evaporation and deposition guide search
-
-    Adapted for discrete NAS search spaces with multi-objective optimization.
-
-    Parameters
-    ----------
-    population : Population
-    evaluator : Evaluator
-    budget : int
-    alpha : float - Pheromone influence (default 1.0)
-    beta : float - Heuristic influence (default 2.0)
-    rho : float - Evaporation rate (default 0.1)
-    Q : float - Pheromone deposit constant (default 1.0)
-    archive_size : int - External archive size (default pop_size)
-    neighborhood_size : int - Initial neighborhood size for LS (default 2)
-    adaptation_rate : float - LS adaptation rate (default 0.1)
-    """
-
-    def __init__(self,
-                 population: Population,
-                 evaluator: Evaluator,
-                 budget: int = 500,
-                 alpha: float = 1.0,
-                 beta: float = 2.0,
-                 rho: float = 0.1,
-                 Q: float = 1.0,
-                 archive_size: int | None = None,
-                 neighborhood_size: int = 2,
-                 adaptation_rate: float = 0.1,
-                 termination: Termination | None = None,
-                 history: History | None = None):
-
-        super().__init__(population, None, None, None, evaluator,
-                         termination=termination, history=history, budget=budget)
-
-        self.alpha = alpha
-        self.beta = beta
-        self.rho = rho
-        self.Q = Q
-        self.archive_size = archive_size or population.size
-        self.neighborhood_size = neighborhood_size
-        self.adaptation_rate = adaptation_rate
-
-        # Pheromone matrix: positions x operations
-        num_positions = population.search_space.num_edges
-        num_ops = population.search_space.num_ops
-        self.pheromone = [[1.0 for _ in range(num_ops)] for _ in range(num_positions)]
-        self.heuristic = [1.0 for _ in range(num_ops)]  # Uniform heuristic
-
-        self.archive: list[Individual] = []
-        self.improvement_history: list[bool] = []
-        self.history_window = 10
-
-    def _dominates(self, a: Individual, b: Individual) -> bool:
-        """Check if a dominates b."""
-        return dominates(a, b, self.evaluator.objective_directions)
-
-    def _construct_solution(self) -> list[int]:
-        """Construct a genotype using ACO probabilistic selection."""
-        genotype = []
-        num_positions = len(self.pheromone)
-        num_ops = len(self.pheromone[0])
-
-        for pos in range(num_positions):
-            # Calculate probabilities for each operation
-            probs = []
-            total = 0.0
-
-            for op in range(num_ops):
-                tau = self.pheromone[pos][op] ** self.alpha
-                eta = self.heuristic[op] ** self.beta
-                prob = tau * eta
-                probs.append(prob)
-                total += prob
-
-            # Select operation probabilistically
-            if total == 0:
-                # Fallback to uniform if all pheromones are zero
-                selected_op = random.randint(0, num_ops - 1)
-            else:
-                r = random.random() * total
-                cumulative = 0.0
-                selected_op = 0
-                for op in range(num_ops):
-                    cumulative += probs[op]
-                    if r <= cumulative:
-                        selected_op = op
-                        break
-
-            genotype.append(selected_op)
-
-        return genotype
-
-    def _neighborhood_search(self, individual: Individual, neighborhood_size: int) -> Individual:
-        """Perform local neighborhood search by flipping genes."""
-        genotype = list(individual.genotype)
-        genes_to_flip = random.sample(range(len(genotype)), min(neighborhood_size, len(genotype)))
-
-        for gene_idx in genes_to_flip:
-            # Flip to a different random operation
-            current_op = genotype[gene_idx]
-            available_ops = [op for op in range(len(self.heuristic)) if op != current_op]
-            if available_ops:
-                genotype[gene_idx] = random.choice(available_ops)
-
-        return Individual(genotype)
-
-    def _update_archive(self, candidate: Individual) -> None:
-        """Update external archive with non-dominated solutions."""
-        # Remove dominated solutions
-        self.archive = [arch for arch in self.archive if not self._dominates(candidate, arch)]
-
-        # Add candidate if not dominated by any archive member
-        dominated = any(self._dominates(arch, candidate) for arch in self.archive)
-        if not dominated:
-            self.archive.append(Individual(candidate.genotype[:], candidate.fitness, candidate.metadata.copy() if candidate.metadata else None))
-
-        # Truncate archive if too large
-        if len(self.archive) > self.archive_size:
-            # Remove most crowded solution (simplified crowding distance)
-            crowding_distances = []
-            for i, ind_i in enumerate(self.archive):
-                distances = []
-                for j, ind_j in enumerate(self.archive):
-                    if i != j:
-                        dist = sum((a - b) ** 2 for a, b in zip(ind_i.fitness, ind_j.fitness)) ** 0.5
-                        distances.append(dist)
-            crowding_distances.append(sum(distances) if distances else 0)
-
-            # Remove individual with smallest crowding distance
-            remove_idx = crowding_distances.index(min(crowding_distances))
-            del self.archive[remove_idx]
-
-    def _update_pheromone(self) -> None:
-        """Update pheromone trails: evaporation and deposition."""
-        num_positions = len(self.pheromone)
-        num_ops = len(self.pheromone[0])
-
-        # Evaporation
-        for pos in range(num_positions):
-            for op in range(num_ops):
-                self.pheromone[pos][op] *= (1 - self.rho)
-
-        # Deposition from archive solutions
-        if self.archive:
-            for ind in self.archive:
-                # Scalarize fitness for pheromone deposit (higher fitness = more pheromone)
-                # Assuming minimization, invert and normalize
-                fitness_values = ind.fitness
-                scalar_fitness = sum(f * d for f, d in zip(fitness_values, self.evaluator.objective_directions))
-                deposit = self.Q / (1 + scalar_fitness)  # Higher fitness = more deposit
-
-                for pos in range(num_positions):
-                    op = ind.genotype[pos]
-                    self.pheromone[pos][op] += deposit
-
-    def _adapt_neighborhood_size(self) -> int:
-        """Adapt neighborhood size based on recent improvement success."""
-        if len(self.improvement_history) < self.history_window:
-            return self.neighborhood_size
-
-        success_rate = sum(self.improvement_history[-self.history_window:]) / self.history_window
-
-        if success_rate > 0.6:
-            # High success - increase exploration
-            new_size = min(self.neighborhood_size + 1, self.population.search_space.num_edges)
-        elif success_rate < 0.3:
-            # Low success - decrease exploration, focus on exploitation
-            new_size = max(self.neighborhood_size - 1, 1)
-        else:
-            new_size = self.neighborhood_size
-
-        # Smooth adaptation
-        self.neighborhood_size = int(self.adaptation_rate * new_size + (1 - self.adaptation_rate) * self.neighborhood_size)
-        self.neighborhood_size = max(1, min(self.neighborhood_size, self.population.search_space.num_edges))
-
-        return self.neighborhood_size
-
-    def run(self) -> Population:
-        """Execute ACO-LS search strategy."""
-        self.population.initialize()
-        self.evaluations = len(self.population)
-        self.generations = 0
-        self.archive = []
-        self.improvement_history = []
-
-        # Initialize archive with initial population
-        for ind in self.population.individuals:
-            self._update_archive(ind)
-
-        self._record_history()
-
-        while not self.termination.should_stop(self.evaluations, self.generations):
-            offspring = []
-            improved_this_gen = False
-
-            # Adapt neighborhood size
-            current_neighborhood_size = self._adapt_neighborhood_size()
-
-            for _ in range(self.population.size):
-                if self.termination.should_stop(self.evaluations, self.generations):
-                    break
-
-                # Construct solution using ACO
-                genotype = self._construct_solution()
-                candidate = Individual(genotype)
-                candidate.fitness = self.evaluator.evaluate(genotype)
-                if hasattr(self.population.search_space, "metadata_from_genotype"):
-                    candidate.metadata = self.population.search_space.metadata_from_genotype(genotype)
-                self.evaluations += 1
-
-                # Apply local search with probability
-                if random.random() < 0.4:  # 40% chance for local search
-                    local_candidate = self._neighborhood_search(candidate, current_neighborhood_size)
-                    local_candidate.fitness = self.evaluator.evaluate(local_candidate.genotype)
-                    if hasattr(self.population.search_space, "metadata_from_genotype"):
-                        local_candidate.metadata = self.population.search_space.metadata_from_genotype(local_candidate.genotype)
-                    self.evaluations += 1
-
-                    if self._dominates(local_candidate, candidate):
-                        candidate = local_candidate
-                        improved_this_gen = True
-
-                offspring.append(candidate)
-                self._update_archive(candidate)
-
-            # Update population using replacement (keep best)
-            from nas_framework.replacement import RankBasedReplacement
-            replacement = RankBasedReplacement()
-            self.population.individuals = replacement.replace(
-                self.population.individuals + offspring,
-                [],
-                self.population.size,
-                self.evaluator.objective_directions
-            )
-
-            # Update pheromone trails
-            self._update_pheromone()
-
-            # Record improvement
-            self.improvement_history.append(improved_this_gen)
-
-            self.generations += 1
-            self._record_history()
-
-        return self.population
-
-
-class AQPSOSearch:
-    """Archive-Guided Quantum-Inspired Population Search (AQPSO) for NAS.
-
-    NOVEL CONTRIBUTIONS
-    -------------------
-    1. **Q-bit superposition encoding**: each individual maintains a probability
-       distribution over operations per gene (Q-bit vector) rather than a single
-       deterministic genotype.  Architectures are sampled (collapsed) from these
-       distributions at evaluation time.
-
-    2. **Archive-guided quantum rotation gate**: the Q-bit rotation angle is
-       computed from the *entire non-dominated archive*, not just the single
-       global best.  Each gene's rotation is a weighted blend of archive member
-       signals, weighted by crowding distance — diverse archive members drive
-       more rotation, crowded ones less.  This steers the probability mass
-       toward the Pareto front while preserving diversity.
-
-    3. **Entanglement-inspired crossover**: two Q-individuals share partial
-       probability mass by averaging their Q-bit vectors, then rotating each
-       toward a different archive guide.  This couples parent Q-distributions
-       in a way that mimics quantum entanglement and produces children whose
-       Q-bits encode a blend of both parents' search histories.
-
-    4. **Adaptive collapse threshold**: the probability of collapsing a Q-bit
-       to a deterministic gene (vs. sampling from its distribution) is annealed
-       from 1.0 (full sampling early) to a lower floor (partial determinism
-       late), balancing exploration and exploitation without manual tuning.
-
-    Algorithm per generation
-    ------------------------
-    1. Collapse each Q-individual's Q-bit vector to a deterministic genotype
-       and evaluate it.
-    2. Update the non-dominated archive with the new individual.
-    3. Rotate each Q-bit toward the archive-weighted guide using the quantum
-       rotation gate (Eq. R below).
-    4. Apply entanglement crossover on a random subset of Q-individual pairs.
-    5. With probability p_repair, repair Q-bits that have collapsed below a
-       diversity floor (prevent premature convergence on any single operation).
-
-    Quantum rotation gate (Eq. R):
-        delta_theta_d = alpha * sign(guide_d - current_sample_d)
-                        * (crowding_weight * archive_pull_d)
-        q[d] += delta_theta_d   (then renormalize to a valid probability dist)
-
-    Parameters
-    ----------
-    search_space : SearchSpace
-    evaluator    : Evaluator
-    pop_size     : int    — number of Q-individuals (default 30)
-    max_iterations: int   — generations (default 300)
-    archive_size : int    — max archive size (default pop_size)
-    alpha        : float  — base rotation step size (default 0.05)
-    alpha_decay  : float  — multiplicative decay of alpha per generation (default 0.995)
-    collapse_floor: float — minimum collapse threshold (default 0.3)
-    p_entangle   : float  — fraction of population undergoing entanglement (default 0.4)
-    p_repair     : float  — probability of repairing a Q-individual per gen (default 0.2)
-    diversity_floor: float— minimum probability any single operation can drop to (default 0.05)
-    """
-
-    def __init__(
-        self,
-        search_space: SearchSpace,
-        evaluator: Evaluator,
-        pop_size: int = 30,
-        max_iterations: int = 300,
-        archive_size: int | None = None,
-        alpha: float = 0.05,
-        alpha_decay: float = 0.995,
-        collapse_floor: float = 0.3,
-        p_entangle: float = 0.4,
-        p_repair: float = 0.2,
-        diversity_floor: float = 0.05,
-        history: History | None = None,
-    ):
-        self.search_space = search_space
-        self.evaluator = evaluator
-        self.pop_size = pop_size
-        self.max_iterations = max_iterations
-        self.archive_size = archive_size or pop_size
-        self.alpha = alpha
-        self.alpha_decay = alpha_decay
-        self.collapse_floor = collapse_floor
-        self.p_entangle = p_entangle
-        self.p_repair = p_repair
-        self.diversity_floor = diversity_floor
-        self.history = history or History()
-
-        self.evaluations: int = 0
-        self.generations: int = 0
-        self.population: list[Individual] = []
-        self.archive: list[Individual] = []
-
-        self._num_ops = search_space.num_ops
-        self._num_genes = search_space.num_edges
-
-        # Q-bit population: list of (num_genes x num_ops) probability matrices.
-        # q_pop[i][d][op] = probability that individual i picks operation `op`
-        # at gene position `d`.
-        self._q_pop: list[list[list[float]]] = []
-
-        # Most recent collapsed genotype for each Q-individual.
-        self._collapsed: list[list[int]] = []
-
-    # ------------------------------------------------------------------
-    # Q-bit helpers
-    # ------------------------------------------------------------------
-
-    def _uniform_qbit(self) -> list[list[float]]:
-        """Return a uniform Q-bit vector (all operations equally likely)."""
-        p = 1.0 / self._num_ops
-        return [[p] * self._num_ops for _ in range(self._num_genes)]
-
-    def _collapse(self, qbit: list[list[float]], collapse_prob: float) -> list[int]:
-        """Sample a genotype from Q-bit distributions.
-
-        With probability `collapse_prob` each gene is drawn from its Q-bit
-        distribution; otherwise it keeps the previously collapsed value (or
-        the argmax if no previous value exists).  This implements the
-        adaptive collapse threshold — late in search, good solutions are
-        partially preserved.
-        """
-        geno = []
-        for d in range(self._num_genes):
-            dist = qbit[d]
-            geno.append(random.choices(range(self._num_ops), weights=dist, k=1)[0])
-        return geno
-
-    def _normalize(self, dist: list[float]) -> list[float]:
-        """Normalize a distribution and enforce the diversity floor."""
-        floor = self.diversity_floor
-        # Clamp each probability to at least the floor
-        clamped = [max(floor, p) for p in dist]
-        total = sum(clamped)
-        return [p / total for p in clamped]
-
-    # ------------------------------------------------------------------
-    # Archive helpers
-    # ------------------------------------------------------------------
-
-    def _dominates(self, a: Individual, b: Individual) -> bool:
-        return dominates(a, b, self.evaluator.objective_directions)
-
-    def _crowding_weights(self) -> list[float]:
-        """Return crowding-distance-based weights for archive members.
-
-        Higher crowding distance → member spans a more diverse region → gets
-        more influence on Q-bit rotation (drives toward underexplored areas).
-        """
-        if not self.archive:
-            return []
-        if len(self.archive) == 1:
-            return [1.0]
-        n_obj = len(self.evaluator.objective_directions)
-        # Compute crowding distances inline
-        scores = [0.0] * len(self.archive)
-        for obj in range(n_obj):
-            direction = self.evaluator.objective_directions[obj]
-            order = sorted(
-                range(len(self.archive)),
-                key=lambda i: self.archive[i].fitness[obj] * direction,
-            )
-            scores[order[0]] = float("inf")
-            scores[order[-1]] = float("inf")
-            min_v = self.archive[order[0]].fitness[obj] * direction
-            max_v = self.archive[order[-1]].fitness[obj] * direction
-            span = max_v - min_v
-            if span == 0:
-                continue
-            for k in range(1, len(order) - 1):
-                idx = order[k]
-                if math.isinf(scores[idx]):
-                    continue
-                prev_v = self.archive[order[k - 1]].fitness[obj] * direction
-                next_v = self.archive[order[k + 1]].fitness[obj] * direction
-                scores[idx] += (next_v - prev_v) / span
-        # Convert to weights (higher crowding = higher weight)
-        finite_scores = [s if not math.isinf(s) else 1.0 for s in scores]
-        total = sum(max(1e-9, s) for s in finite_scores)
-        return [max(1e-9, s) / total for s in finite_scores]
-
-    def _archive_update(self, ind: Individual) -> None:
-        """Update non-dominated archive; truncate by crowding if needed."""
-        # Remove dominated members
-        self.archive = [a for a in self.archive if not self._dominates(ind, a)]
-        # Add if not dominated
-        if not any(self._dominates(a, ind) for a in self.archive):
-            if not any(
-                tuple(a.genotype) == tuple(ind.genotype) for a in self.archive
-            ):
-                self.archive.append(
-                    Individual(ind.genotype[:], ind.fitness, ind.metadata.copy())
-                )
-        # Truncate
-        while len(self.archive) > self.archive_size:
-            weights = self._crowding_weights()
-            # Remove the member with the SMALLEST crowding weight (most crowded)
-            remove_idx = min(range(len(self.archive)), key=lambda i: weights[i])
-            del self.archive[remove_idx]
-
-    # ------------------------------------------------------------------
-    # NOVEL CORE: Archive-guided quantum rotation gate
-    # ------------------------------------------------------------------
-
-    def _archive_guide_signal(self) -> list[list[float]]:
-        """Compute the archive-weighted guide signal per gene per operation.
-
-        For each gene position d and each operation op:
-            guide_signal[d][op] = sum_over_archive(
-                crowding_weight[a] * (1 if archive[a].genotype[d] == op else 0)
-            )
-
-        This gives a soft target distribution for each gene, blending all
-        archive members weighted by their crowding distance.  Genes where
-        all archive members agree (low entropy) produce a strong signal;
-        genes where archive members disagree (high entropy) produce a weak,
-        uniform signal — naturally focusing rotation where the archive is
-        informative.
-        """
-        if not self.archive:
-            # No archive: uniform signal (no rotation)
-            return [[1.0 / self._num_ops] * self._num_ops
-                    for _ in range(self._num_genes)]
-
-        weights = self._crowding_weights()
-        signal = [[0.0] * self._num_ops for _ in range(self._num_genes)]
-        for w, member in zip(weights, self.archive):
-            for d in range(self._num_genes):
-                op = member.genotype[d]
-                signal[d][op] += w
-        # Normalize each gene's signal to a distribution
-        for d in range(self._num_genes):
-            total = sum(signal[d])
-            if total > 0:
-                signal[d] = [v / total for v in signal[d]]
-            else:
-                signal[d] = [1.0 / self._num_ops] * self._num_ops
-        return signal
-
-    def _rotate_qbit(
-        self,
-        qbit: list[list[float]],
-        guide_signal: list[list[float]],
-        alpha: float,
-    ) -> list[list[float]]:
-        """Apply the quantum rotation gate toward the guide signal.
-
-        For each gene d:
-            new_q[d][op] = q[d][op] + alpha * (guide[d][op] - q[d][op])
-
-        This is a convex combination step (linear interpolation toward the
-        guide).  When alpha=0, Q-bits are unchanged; when alpha=1, Q-bits
-        collapse to the guide distribution exactly.  The diversity floor in
-        `_normalize` prevents any operation probability from reaching zero.
-        """
-        new_qbit = []
-        for d in range(self._num_genes):
-            new_dist = [
-                qbit[d][op] + alpha * (guide_signal[d][op] - qbit[d][op])
-                for op in range(self._num_ops)
-            ]
-            new_qbit.append(self._normalize(new_dist))
-        return new_qbit
-
-    # ------------------------------------------------------------------
-    # NOVEL CORE: Entanglement-inspired crossover
-    # ------------------------------------------------------------------
-
-    def _entangle(
-        self,
-        qi: list[list[float]],
-        qj: list[list[float]],
-        guide_signal: list[list[float]],
-        alpha: float,
-    ) -> tuple[list[list[float]], list[list[float]]]:
-        """Entanglement-inspired Q-bit crossover.
-
-        Step 1 — Averaging (entanglement):
-            q_shared[d] = (qi[d] + qj[d]) / 2   for each gene d
-
-        Step 2 — Differentiated rotation:
-            child_i rotates q_shared toward guide with +alpha (exploitation)
-            child_j rotates q_shared with a perturbed guide (exploration)
-
-        The perturbed guide for child_j is the complement of the original
-        guide signal — it deliberately pushes probability mass toward
-        LESS-visited archive operations, promoting diversity.
-
-        This is novel: standard quantum crossover only averages Q-bits;
-        the differentiated rotation creates *two distinct offspring* from
-        the shared superposition, analogous to measuring entangled particles
-        in different bases.
-        """
-        # Step 1: Average (entangle)
-        q_shared = []
-        for d in range(self._num_genes):
-            shared_d = self._normalize([
-                (qi[d][op] + qj[d][op]) / 2.0
-                for op in range(self._num_ops)
-            ])
-            q_shared.append(shared_d)
-
-        # Step 2a: child_i rotates toward the archive guide (exploitation)
-        child_i = self._rotate_qbit(q_shared, guide_signal, alpha)
-
-        # Step 2b: child_j rotates toward the complement guide (exploration)
-        # Complement: invert the guide distribution so least-visited ops get more weight
-        complement_guide = []
-        for d in range(self._num_genes):
-            inv = [1.0 - guide_signal[d][op] for op in range(self._num_ops)]
-            # Clamp negative values from near-1 guide entries
-            inv = [max(1e-9, v) for v in inv]
-            total = sum(inv)
-            complement_guide.append([v / total for v in inv])
-        child_j = self._rotate_qbit(q_shared, complement_guide, alpha * 0.5)
-
-        return child_i, child_j
-
-    # ------------------------------------------------------------------
-    # Q-bit diversity repair
-    # ------------------------------------------------------------------
-
-    def _repair_qbit(self, qbit: list[list[float]]) -> list[list[float]]:
-        """Reinject uniform probability mass into any gene that has converged.
-
-        A gene is considered converged when its maximum probability exceeds
-        a threshold (0.85).  Repair adds a small uniform component, preventing
-        the Q-bit from locking onto a single operation prematurely.
-        """
-        repaired = []
-        for d in range(self._num_genes):
-            if max(qbit[d]) > 0.85:
-                uniform = [1.0 / self._num_ops] * self._num_ops
-                # Blend: 80% current, 20% uniform
-                blended = [0.8 * qbit[d][op] + 0.2 * uniform[op]
-                           for op in range(self._num_ops)]
-                repaired.append(self._normalize(blended))
-            else:
-                repaired.append(qbit[d])
-        return repaired
-
-    # ------------------------------------------------------------------
-    # Evaluation helper
-    # ------------------------------------------------------------------
-
-    def _evaluate(self, genotype: list[int]) -> Individual:
-        fitness = self.evaluator.evaluate(genotype)
-        metadata = {}
-        if hasattr(self.search_space, "metadata_from_genotype"):
-            metadata = self.search_space.metadata_from_genotype(genotype)
-        elif hasattr(self.evaluator, "benchmark") and hasattr(
-            self.evaluator.benchmark, "get_metadata"
-        ):
-            metadata = self.evaluator.benchmark.get_metadata(genotype)
-        self.evaluations += 1
-        return Individual(genotype[:], fitness, metadata=metadata)
-
-    # ------------------------------------------------------------------
-    # Main loop
-    # ------------------------------------------------------------------
-
-    def run(self) -> list[Individual]:
-        """Execute the AQPSO search and return the final archive."""
-        K = max(1, self.max_iterations)
-        alpha = self.alpha
-
-        # Initialise Q-individuals with uniform distributions
-        self._q_pop = [self._uniform_qbit() for _ in range(self.pop_size)]
-        self._collapsed = [
-            self.search_space.random_individual() for _ in range(self.pop_size)
-        ]
-        self.archive = []
-        self.evaluations = 0
-        self.generations = 0
-        self.population = []
-
-        # Evaluate initial collapsed genotypes
-        for i in range(self.pop_size):
-            ind = self._evaluate(self._collapsed[i])
-            self.population.append(ind)
-            self._archive_update(ind)
-
-        self.history.record(
-            generation=self.generations,
-            evaluations=self.evaluations,
-            population=self.population,
-            pareto_front=list(self.archive),
-        )
-
-        for k in range(1, K + 1):
-            progress = k / K
-            # Adaptive collapse threshold: starts at 1.0, decays to collapse_floor
-            collapse_prob = max(
-                self.collapse_floor, 1.0 - (1.0 - self.collapse_floor) * progress
-            )
-
-            # ── Compute archive-weighted guide signal (NOVEL) ─────────
-            guide_signal = self._archive_guide_signal()
-
-            # ── Q-bit rotation toward archive guide (NOVEL) ───────────
-            for i in range(self.pop_size):
-                self._q_pop[i] = self._rotate_qbit(
-                    self._q_pop[i], guide_signal, alpha
-                )
-
-            # ── Entanglement crossover on a random subset (NOVEL) ─────
-            n_entangle = max(2, int(self.p_entangle * self.pop_size))
-            # Ensure even number for pairing
-            if n_entangle % 2 != 0:
-                n_entangle -= 1
-            entangle_idx = random.sample(range(self.pop_size), n_entangle)
-            random.shuffle(entangle_idx)
-            for pair_start in range(0, n_entangle, 2):
-                i_idx = entangle_idx[pair_start]
-                j_idx = entangle_idx[pair_start + 1]
-                child_qi, child_qj = self._entangle(
-                    self._q_pop[i_idx],
-                    self._q_pop[j_idx],
-                    guide_signal,
-                    alpha,
-                )
-                self._q_pop[i_idx] = child_qi
-                self._q_pop[j_idx] = child_qj
-
-            # ── Q-bit repair (diversity maintenance) ──────────────────
-            for i in range(self.pop_size):
-                if random.random() < self.p_repair:
-                    self._q_pop[i] = self._repair_qbit(self._q_pop[i])
-
-            # ── Collapse and evaluate ─────────────────────────────────
-            new_population: list[Individual] = []
-            for i in range(self.pop_size):
-                collapsed_geno = self._collapse(self._q_pop[i], collapse_prob)
-                ind = self._evaluate(collapsed_geno)
-                new_population.append(ind)
-                self._archive_update(ind)
-
-                # Terminate mid-generation if budget is exhausted
-                if self.evaluations >= (self.max_iterations * self.pop_size + self.pop_size):
-                    break
-
-            self.population = new_population
-
-            # ── Alpha decay ───────────────────────────────────────────
-            alpha *= self.alpha_decay
-            alpha = max(alpha, 0.005)  # floor to preserve residual learning
-
-            self.generations = k
-            self.history.record(
-                generation=self.generations,
-                evaluations=self.evaluations,
-                population=self.population,
-                pareto_front=list(self.archive),
-            )
-
-        return [
-            Individual(ind.genotype[:], ind.fitness, ind.metadata.copy())
-            for ind in self.archive
-        ]
-
 
 # =============================================================================
 # APSO-E: Archive-Guided PSO with Elite Perturbation
@@ -3378,4 +2430,363 @@ class NSGA2SearchStrategy(SearchStrategy):
         return self.population
 
 
-        
+
+
+class ABCFireflyStrategy:
+    """ABC-Firefly hybrid for multi-objective NAS.
+
+    Structural design
+    -----------------
+    - ABC skeleton: food sources, employee phase, onlooker phase, scout phase.
+    - Employee phase: unchanged 1-op neighbor move (local exploitation within cluster).
+    - Onlooker phase: FA multi-gene attraction toward a Pareto-archive member
+      instead of 1-op neighbor sampling. This is the inter-cluster jump that
+      standard ABC cannot do.
+    - Scout phase: objective-stratified reset (K=6 samples, best per extreme:
+      min-lat, max-acc, balanced). Guarantees all clusters are seeded.
+    - External Pareto archive: maintained every generation, used as FA target
+      pool. Never scalar-filtered.
+
+    Parameters
+    ----------
+    search_space  : CSVSearchSpace
+    evaluator     : Evaluator
+    pop_size      : int    number of food sources (default 20)
+    budget        : int    total evaluation budget
+    fa_prob       : float  per-gene FA fire probability in onlooker phase (default 0.5)
+    archive_size  : int    max archive size (default pop_size)
+    exh_fraction  : float  abandonment_limit = budget / (pop_size * exh_fraction) (default 4.0)
+    dmt_fraction  : float  scout suppressed after this fraction of budget (default 0.67)
+    history       : History or None
+    """
+
+    def __init__(
+        self,
+        search_space,
+        evaluator: Evaluator,
+        pop_size: int = 20,
+        budget: int = 500,
+        fa_prob: float = 0.5,
+        archive_size: int | None = None,
+        exh_fraction: float = 4.0,
+        dmt_fraction: float = 0.67,
+        history: History | None = None,
+    ):
+        self.search_space = search_space
+        self.evaluator    = evaluator
+        self.pop_size     = pop_size
+        self.budget       = budget
+        self.fa_prob      = fa_prob
+        self.archive_size = archive_size or pop_size
+        self.dmt          = int(dmt_fraction * budget)
+        self.abandonment_limit = max(3, int(budget / (pop_size * exh_fraction)))
+        self.history      = history or History()
+
+        self.evaluations: int = 0
+        self.generations: int = 0
+        self.food_sources: list  = []   # list[FoodSource]
+        self.archive: list       = []   # list[Individual], non-dominated
+        self._visited: dict      = {}   # genotype tuple -> fitness tuple
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _eval(self, ind: Individual) -> None:
+        """Evaluate ind in-place; use visit cache to avoid duplicate evals."""
+        key = tuple(ind.genotype)
+        if key in self._visited:
+            ind.fitness = self._visited[key]
+            if hasattr(self.search_space, "metadata_from_genotype"):
+                ind.metadata = self.search_space.metadata_from_genotype(ind.genotype)
+            return
+        ind.fitness = self.evaluator.evaluate(ind.genotype)
+        if hasattr(self.search_space, "metadata_from_genotype"):
+            ind.metadata = self.search_space.metadata_from_genotype(ind.genotype)
+        self._visited[key] = ind.fitness
+        self.evaluations += 1
+
+    def _archive_update(self, ind: Individual) -> None:
+        """Add ind to archive if non-dominated; prune dominated members."""
+        dirs = self.evaluator.objective_directions
+        for a in self.archive:
+            if dominates(a, ind, dirs):
+                return
+        self.archive = [a for a in self.archive if not dominates(ind, a, dirs)]
+        # Dedup by genotype
+        if not any(tuple(a.genotype) == tuple(ind.genotype) for a in self.archive):
+            self.archive.append(Individual(ind.genotype[:], ind.fitness, ind.metadata.copy()))
+        # Truncate by crowding distance if over limit
+        if len(self.archive) > self.archive_size:
+            self._truncate_archive()
+
+    def _truncate_archive(self) -> None:
+        """Remove the archive member with smallest crowding distance."""
+        if len(self.archive) <= self.archive_size:
+            return
+        dirs = self.evaluator.objective_directions
+        n_obj = len(dirs)
+        scores = [0.0] * len(self.archive)
+        for obj in range(n_obj):
+            order = sorted(range(len(self.archive)),
+                           key=lambda i: self.archive[i].fitness[obj] * dirs[obj])
+            scores[order[0]]  = float("inf")
+            scores[order[-1]] = float("inf")
+            f_min = self.archive[order[0]].fitness[obj]  * dirs[obj]
+            f_max = self.archive[order[-1]].fitness[obj] * dirs[obj]
+            if f_max == f_min:
+                continue
+            for k in range(1, len(order) - 1):
+                idx = order[k]
+                if math.isinf(scores[idx]):
+                    continue
+                prev_v = self.archive[order[k-1]].fitness[obj] * dirs[obj]
+                next_v = self.archive[order[k+1]].fitness[obj] * dirs[obj]
+                scores[idx] += (next_v - prev_v) / (f_max - f_min)
+        remove = min(range(len(self.archive)), key=lambda i: scores[i])
+        del self.archive[remove]
+
+    def _neighbor_1op(self, ind: Individual) -> Individual:
+        """Standard ABC 1-op neighbor: change one random gene."""
+        geno = ind.genotype[:]
+        idx  = random.randint(0, len(geno) - 1)
+        choices = [op for op in range(self.search_space.num_ops) if op != geno[idx]]
+        geno[idx] = random.choice(choices)
+        return Individual(geno)
+
+    def _fa_move(self, ind: Individual, target: Individual) -> Individual:
+        """FA multi-gene attraction: adopt target gene with prob fa_prob per gene.
+
+        Unlike 1-op neighbor, this can change multiple genes in one step,
+        bridging the Hamming gap between distant clusters.
+        """
+        geno = ind.genotype[:]
+        for i in range(len(geno)):
+            if geno[i] != target.genotype[i] and random.random() < self.fa_prob:
+                geno[i] = target.genotype[i]
+        return Individual(geno)
+
+    def _pareto_accept(self, fs, candidate: Individual) -> bool:
+        """Accept candidate into food source using Pareto dominance.
+
+        - candidate dominates current: always accept.
+        - current dominates candidate: always reject.
+        - non-dominated pair: accept with 50% probability (diversity preservation).
+        """
+        dirs = self.evaluator.objective_directions
+        curr = fs.individual
+        if dominates(candidate, curr, dirs):
+            fs.individual  = candidate
+            fs.trial_count = 0
+            return True
+        if dominates(curr, candidate, dirs):
+            fs.trial_count += 1
+            return False
+        # Non-dominated: accept with 50% to maintain diversity
+        if random.random() < 0.5:
+            fs.individual  = candidate
+            fs.trial_count = 0
+            return True
+        fs.trial_count += 1
+        return False
+
+    def _stratified_reset(self) -> Individual:
+        """Sample K=6 random archs; return best on a random extreme objective."""
+        K    = 6
+        dirs = self.evaluator.objective_directions
+        candidates = []
+        for _ in range(K):
+            ind = Individual(self.search_space.random_individual())
+            self._eval(ind)
+            if self.termination_check():
+                break
+            candidates.append(ind)
+        if not candidates:
+            ind = Individual(self.search_space.random_individual())
+            self._eval(ind)
+            return ind
+        extreme = random.randint(0, 2)
+        if extreme == 0:   # min latency
+            return max(candidates, key=lambda x: x.fitness[1] * dirs[1])
+        elif extreme == 1:  # max accuracy
+            return max(candidates, key=lambda x: x.fitness[0] * dirs[0])
+        else:              # balanced: non-dominated among K
+            front = compute_pareto_front(candidates, dirs)
+            return random.choice(front) if front else candidates[0]
+
+    def termination_check(self) -> bool:
+        limit = getattr(self, '_budget_main', self.budget)
+        return self.evaluations >= limit
+
+    def _record(self) -> None:
+        inds = [fs.individual for fs in self.food_sources]
+        self.history.record(
+            generation=self.generations,
+            evaluations=self.evaluations,
+            population=inds,
+            pareto_front=list(self.archive),
+        )
+
+    # ------------------------------------------------------------------
+    # ABC phases
+    # ------------------------------------------------------------------
+
+    def _employee_phase(self) -> None:
+        """1-op neighbor move per food source; Pareto-aware acceptance."""
+        for fs in self.food_sources:
+            if self.termination_check():
+                return
+            neighbor = self._neighbor_1op(fs.individual)
+            self._eval(neighbor)
+            self._archive_update(neighbor)
+            self._pareto_accept(fs, neighbor)
+
+    def _onlooker_phase(self) -> None:
+        if not self.archive:
+            return
+        fixed_lat = self._is_fixed_latency()
+        dirs = self.evaluator.objective_directions
+        n_arch = len(self.archive)
+
+        if not fixed_lat and n_arch >= 2:
+            scores = [0.0] * n_arch
+            for obj in range(len(dirs)):
+                order = sorted(range(n_arch),
+                               key=lambda i: self.archive[i].fitness[obj] * dirs[obj])
+                scores[order[0]] = float("inf")
+                scores[order[-1]] = float("inf")
+                f_min = self.archive[order[0]].fitness[obj] * dirs[obj]
+                f_max = self.archive[order[-1]].fitness[obj] * dirs[obj]
+                if f_max == f_min:
+                    continue
+                for k in range(1, len(order) - 1):
+                    idx = order[k]
+                    if math.isinf(scores[idx]):
+                        continue
+                    prev_v = self.archive[order[k-1]].fitness[obj] * dirs[obj]
+                    next_v = self.archive[order[k+1]].fitness[obj] * dirs[obj]
+                    scores[idx] += (next_v - prev_v) / (f_max - f_min)
+            weights = [10.0 if math.isinf(s) else max(1e-3, s) for s in scores]
+        else:
+            weights = None
+
+        last_arch_size = len(self.archive)
+        for fs in self.food_sources:
+            if self.termination_check():
+                return
+            if fixed_lat or weights is None:
+                neighbor = self._neighbor_1op(fs.individual)
+                self._eval(neighbor)
+                self._archive_update(neighbor)
+                self._pareto_accept(fs, neighbor)
+            else:
+                if len(self.archive) != last_arch_size:
+                    n_arch = len(self.archive)
+                    scores = [0.0] * n_arch
+                    for obj in range(len(dirs)):
+                        order = sorted(range(n_arch),
+                                       key=lambda i: self.archive[i].fitness[obj] * dirs[obj])
+                        scores[order[0]] = float("inf")
+                        scores[order[-1]] = float("inf")
+                        f_min = self.archive[order[0]].fitness[obj] * dirs[obj]
+                        f_max = self.archive[order[-1]].fitness[obj] * dirs[obj]
+                        if f_max == f_min:
+                            continue
+                        for k in range(1, len(order) - 1):
+                            idx = order[k]
+                            if math.isinf(scores[idx]):
+                                continue
+                            prev_v = self.archive[order[k-1]].fitness[obj] * dirs[obj]
+                            next_v = self.archive[order[k+1]].fitness[obj] * dirs[obj]
+                            scores[idx] += (next_v - prev_v) / (f_max - f_min)
+                    weights = [10.0 if math.isinf(s) else max(1e-3, s) for s in scores]
+                    last_arch_size = n_arch
+                target = random.choices(self.archive, weights=weights, k=1)[0]
+                moved = self._fa_move(fs.individual, target)
+                self._eval(moved)
+                self._archive_update(moved)
+                self._pareto_accept(fs, moved)
+
+    def _scout_phase(self) -> None:
+        """Stratified reset for exhausted food sources (early search only)."""
+        if self.evaluations >= self.dmt:
+            return
+        for fs in self.food_sources:
+            if fs.trial_count >= self.abandonment_limit:
+                if self.termination_check():
+                    return
+                fresh = self._stratified_reset()
+                self._archive_update(fresh)
+                fs.reset(fresh)
+    def _is_fixed_latency(self) -> bool:
+        if len(self.archive) < 2:
+            return False
+        lats = [a.fitness[1] for a in self.archive if a.fitness]
+        return max(lats) - min(lats) < 1e-6
+
+    def _endpoint_local_search(self, extra: int) -> None:
+        dirs = self.evaluator.objective_directions
+        if not self.archive:
+            return
+        hard_limit = self.evaluations + extra
+        i = 0
+        attempts = 0
+        max_attempts = extra * 10
+        while self.evaluations < hard_limit and attempts < max_attempts:
+            # Refresh extremes each iteration so they track archive updates
+            lat_extreme = min(self.archive, key=lambda a: a.fitness[1] * dirs[1])
+            acc_extreme = max(self.archive, key=lambda a: a.fitness[0] * dirs[0])
+            # Only use lat extreme if latency spread is meaningful (>1e-4)
+            lats = [a.fitness[1] for a in self.archive]
+            use_lat = (max(lats) - min(lats)) > 1e-4
+            if use_lat:
+                seed = lat_extreme if i % 2 == 0 else acc_extreme
+            else:
+                seed = acc_extreme
+            neighbor = self._neighbor_1op(seed)
+            self._eval(neighbor)
+            self._archive_update(neighbor)
+            i += 1
+            attempts += 1
+
+    def run(self) -> list[Individual]:
+        from nas_framework.population import FoodSource
+        self.food_sources = []
+        self.archive      = []
+        self._visited     = {}
+        self.evaluations  = 0
+        self.generations  = 0
+
+        # Reserve 5% budget for endpoint polish
+        extra        = max(1, int(0.05 * self.budget))
+        self._budget_main = self.budget - extra   # main loop stops here
+
+        for _ in range(self.pop_size):
+            geno = self.search_space.random_individual()
+            ind  = Individual(geno)
+            self._eval(ind)
+            self.food_sources.append(FoodSource(ind))
+            self._archive_update(ind)
+
+        self._record()
+
+        while not self.termination_check():
+            self._employee_phase()
+            if self.termination_check():
+                break
+            self._onlooker_phase()
+            if self.termination_check():
+                break
+            self._scout_phase()
+            self.generations += 1
+            self._record()
+
+        self._endpoint_local_search(extra)
+
+        return [Individual(a.genotype[:], a.fitness, a.metadata.copy())
+                for a in self.archive]
+
+
+
+
+

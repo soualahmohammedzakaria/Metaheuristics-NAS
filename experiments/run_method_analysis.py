@@ -22,7 +22,7 @@ from nas_framework.mutation import SinglePointMutation, GaussianMutation, ABCNei
 from nas_framework.population import Individual, Population, PSOPopulation, ABCPopulation
 from nas_framework.replacement import ElitistReplacement, CrowdingReplacement, RankBasedReplacement
 from nas_framework.search_space import CSVSearchSpace
-from nas_framework.search_strategy import BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch, MOSHOSearch, PSOSearchStrategy, ABCSearchStrategy, FireflySearchStrategy, HybridMBOStrategy, DEANSSearchStrategy, ACOLSSearchStrategy, AQPSOSearch, APSOESearch, NSGA2SearchStrategy
+from nas_framework.search_strategy import ABCFireflyStrategy,BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch, MOSHOSearch, PSOSearchStrategy, ABCSearchStrategy, FireflySearchStrategy, HybridMBOStrategy,  APSOESearch, NSGA2SearchStrategy
 from nas_framework.selection import TournamentSelection, RouletteWheelSelection
 from utilities.metrics import c_metric, hypervolume_2d, normalized_hypervolume_2d, igd_plus, non_dominated
 from utilities.plotting import (
@@ -115,6 +115,17 @@ def _build_strategy(
             budget=budget,
             w=0.4,
         )
+    if method == "abc_firefly":
+        return ABCFireflyStrategy(
+            search_space=search_space,
+            evaluator=evaluator,
+            pop_size=pop_size,
+            budget=budget,
+            fa_prob=0.5,
+            archive_size=pop_size,
+            exh_fraction=4.0,
+            dmt_fraction=0.67,
+        )
     if method == "abc":
         limit = max(5, budget // 25)
         population = ABCPopulation(search_space, evaluator, size=pop_size, abandonment_limit=limit)
@@ -154,44 +165,8 @@ def _build_strategy(
             rank_fraction=0.5,
             fa_prob=0.5,
         )
-    if method == "deans":
-        return DEANSSearchStrategy(
-            population=Population(search_space, evaluator, size=pop_size),
-            evaluator=evaluator,
-            budget=budget,
-            F=0.8,
-            CR=0.9,
-            archive_size=pop_size,
-            neighborhood_size=3,
-            adaptation_rate=0.1,
-        )
-    if method == "aco_ls":
-        return ACOLSSearchStrategy(
-            population=Population(search_space, evaluator, size=pop_size),
-            evaluator=evaluator,
-            budget=budget,
-            alpha=1.0,
-            beta=2.0,
-            rho=0.1,
-            Q=1.0,
-            archive_size=pop_size,
-            neighborhood_size=2,
-            adaptation_rate=0.1,
-        )
-    if method == "aqpso":
-        return AQPSOSearch(
-            search_space=search_space,
-            evaluator=evaluator,
-            pop_size=pop_size,
-            max_iterations=max(1, budget // pop_size),
-            archive_size=pop_size,
-            alpha=0.05,
-            alpha_decay=0.995,
-            collapse_floor=0.3,
-            p_entangle=0.4,
-            p_repair=0.2,
-            diversity_floor=0.05,
-        )
+    
+
     if method == "apso_e":
         return APSOESearch(
             search_space=search_space,
@@ -217,6 +192,7 @@ def _build_strategy(
             evaluator=evaluator,
             budget=budget,
         )
+ 
     raise ValueError(f"Unknown method: {method}")
 
 
@@ -529,7 +505,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--method",
-        choices=["random", "bruteforce", "skyline", "mowso", "mosho", "pso", "abc", "firefly", "hybrid_mbo", "deans", "aco_ls", "aqpso", "apso_e", "nsga2"],
+        choices=["random", "bruteforce", "skyline", "mowso", "mosho", "abc_firefly", "pso", "abc", "firefly", "hybrid_mbo", "apso_e", "nsga2"],
         default="random",
         help="Search strategy method to analyze.",
     )
