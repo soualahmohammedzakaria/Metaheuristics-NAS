@@ -7,7 +7,7 @@ from nas_framework.mo_utils import pareto_front as compute_pareto_front
 class Individual:
     """A single candidate solution with its fitness."""
 
-    def __init__(self, genotype: list[int],
+    def __init__(self, genotype,
                  fitness: tuple[float, ...] | None = None,
                  metadata: dict | None = None):
         self.genotype = genotype
@@ -16,6 +16,22 @@ class Individual:
         self.rank: int = 0
         self.crowding_distance: float = 0.0
 
+    @property
+    def architecture(self):
+        return self.genotype
+
+    @architecture.setter
+    def architecture(self, value) -> None:
+        self.genotype = value
+
+    @property
+    def objectives(self) -> tuple[float, ...] | None:
+        return self.fitness
+
+    @objectives.setter
+    def objectives(self, value: tuple[float, ...] | None) -> None:
+        self.fitness = value
+
     def __repr__(self) -> str:
         return f"Individual({self.genotype}, fitness={self.fitness})"
 
@@ -23,7 +39,7 @@ class Individual:
 class Population:
     """Manages a collection of individuals."""
 
-    def __init__(self, search_space: SearchSpace, evaluator: Evaluator,
+    def __init__(self, search_space: SearchSpace | None = None, evaluator: Evaluator | None = None,
                  size: int = 20):
         self.search_space = search_space
         self.evaluator = evaluator
@@ -32,6 +48,8 @@ class Population:
 
     def initialize(self) -> None:
         """Create random individuals and evaluate them."""
+        if self.search_space is None or self.evaluator is None:
+            raise ValueError("Population.initialize requires both search_space and evaluator")
         self.individuals = []
         for _ in range(self.size):
             geno = self.search_space.random_individual()

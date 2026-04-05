@@ -127,6 +127,27 @@ def pareto_front(individuals: Iterable[Individual],
     return fronts[0] if fronts else []
 
 
+def compute_crowding_distance(front: list[Individual]) -> None:
+    """Dvolver/NSGA-II crowding distance for maximization objectives."""
+    if not front:
+        return
+    directions = (1,) * len(front[0].fitness)
+    crowding_distance(front, directions)
+
+
+def crowded_comparison(ind_a: Individual, ind_b: Individual) -> bool:
+    """True if ind_a is preferred over ind_b by rank then crowding distance."""
+    if ind_a.rank != ind_b.rank:
+        return ind_a.rank < ind_b.rank
+    return ind_a.crowding_distance > ind_b.crowding_distance
+
+
+def fast_non_dominated_sort_max(population: list[Individual]) -> list[list[Individual]]:
+    """NSGA-II non-dominated sorting with all objectives maximized."""
+    directions = (1,) * len(population[0].fitness) if population else (1,)
+    return fast_non_dominated_sort(population, directions)
+
+
 def exact_pareto_front_2d(individuals: Iterable[Individual],
                           directions: tuple[int, int]) -> list[Individual]:
     """Exact first Pareto front for 2 objectives using sort+sweep.
@@ -177,4 +198,54 @@ def exact_pareto_front_2d(individuals: Iterable[Individual],
     front.extend(nan_like)
     crowding_distance(front, directions)
     return front
+
+
+def _point_dominates(p: tuple[float, float], q: tuple[float, float]) -> bool:
+    return (p[0] >= q[0] and p[1] >= q[1]) and (p[0] > q[0] or p[1] > q[1])
+
+
+def _non_dominated_points(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    nd: list[tuple[float, float]] = []
+    for i, p in enumerate(points):
+        dominated = False
+        for j, q in enumerate(points):
+            if i == j:
+                continue
+            if _point_dominates(q, p):
+                dominated = True
+                break
+        if not dominated:
+            nd.append(p)
+
+    return sorted(set(nd), key=lambda x: (x[0], x[1]))
+
+
+def compute_hypervolume(pareto_front: list[Individual],
+                        reference_point: tuple[float, float] = (0.0, 0.0)) -> float:
+    """2D hypervolume for maximize-maximize objectives using an x-sweep."""
+    if not pareto_front:
+        return 0.0
+
+    rx, ry = reference_point
+    points: list[tuple[float, float]] = []
+    for ind in pareto_front:
+        if ind.fitness is None:
+            continue
+        x = float(ind.fitness[0])
+        y = float(ind.fitness[1])
+        if x > rx and y > ry:
+            points.append((x, y))
+
+    if not points:
+        return 0.0
+
+    nd_points = _non_dominated_points(points)
+    hv = 0.0
+    prev_x = rx
+    for x, y in nd_points:
+        width = max(0.0, x - prev_x)
+        height = max(0.0, y - ry)
+        hv += width * height
+        prev_x = x
+    return hv
 

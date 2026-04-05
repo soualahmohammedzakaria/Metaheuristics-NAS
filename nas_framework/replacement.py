@@ -1,6 +1,6 @@
 ﻿from abc import ABC, abstractmethod
 from nas_framework.population import Individual
-from nas_framework.mo_utils import take_pareto_best
+from nas_framework.mo_utils import take_pareto_best, fast_non_dominated_sort_max, compute_crowding_distance
 
 
 class Replacement(ABC):
@@ -37,4 +37,29 @@ class GenerationalReplacement(Replacement):
             elite = take_pareto_best(population, 1, objective_directions)
             offspring.extend(elite)
         return take_pareto_best(offspring, pop_size, objective_directions)
+
+
+class DvolverReplacement:
+    """Algorithm 1 survivor selection from Dvolver: select N from 2N."""
+
+    def select_survivors(self, parents: list[Individual], offspring: list[Individual], N: int) -> list[Individual]:
+        combined = parents + offspring
+        fronts = fast_non_dominated_sort_max(combined)
+        for front in fronts:
+            compute_crowding_distance(front)
+
+        selected: list[Individual] = []
+        rem = N
+        i = 0
+        while rem > 0 and i < len(fronts):
+            front_i = sorted(fronts[i], key=lambda ind: ind.crowding_distance, reverse=True)
+            if len(front_i) <= rem:
+                selected.extend(front_i)
+                rem -= len(front_i)
+                i += 1
+            else:
+                selected.extend(front_i[:rem])
+                rem = 0
+
+        return selected
 

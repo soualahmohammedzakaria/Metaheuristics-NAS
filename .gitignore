@@ -1,0 +1,12 @@
+#files to ignore 
+*.log
+*.tmp
+#directories to ignore
+node_modules/
+dist/
+#ignore environment files
+.env
+#ignore IDE specific files
+.vscode/
+.idea/
+__pycache__/

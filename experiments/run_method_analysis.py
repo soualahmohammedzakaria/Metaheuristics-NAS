@@ -17,13 +17,21 @@ if str(ROOT) not in sys.path:
 
 from nas_framework.benchmark_api import CSVBenchmarkAPI
 from nas_framework.crossover import UniformCrossover
-from nas_framework.evaluator import Evaluator
+from nas_framework.evaluator import Evaluator, DvolverEvaluator
 from nas_framework.mutation import SinglePointMutation
 from nas_framework.population import Individual, Population
 from nas_framework.replacement import ElitistReplacement
-from nas_framework.search_space import CSVSearchSpace
-from nas_framework.search_strategy import BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch, MOSHOSearch
+from nas_framework.search_space import CSVSearchSpace, CSVGenotypeDvolverSearchSpace
+from nas_framework.search_strategy import (
+    BruteForceParetoSearch,
+    DvolverSearchStrategy,
+    RandomSearch,
+    SkylineSearch,
+    MOWSOSearch,
+    MOSHOSearch,
+)
 from nas_framework.selection import TournamentSelection
+from nas_framework.termination import TerminationCriteria
 from utilities.metrics import c_metric, hypervolume_2d, normalized_hypervolume_2d, igd_plus, non_dominated
 from utilities.plotting import (
     save_context_metric_heatmap,
@@ -31,10 +39,12 @@ from utilities.plotting import (
     save_pareto_scatter,
     save_runtime_boxplot,
 )
+import matplotlib.pyplot as plt
 
 DEFAULT_DATASETS = ("cifar10", "cifar100", "ImageNet16-120")
 DEFAULT_DEVICES = ("edgegpu", "edgetpu", "eyeriss", "fpga", "pixel3", "raspi4")
 OBJECTIVE_DIRECTIONS = (1, -1)
+ALL_METHODS = ("random", "bruteforce", "skyline", "mowso", "mosho", "dvolver")
 
 
 def _resolve_path(path_like: str) -> Path:
@@ -65,18 +75,65 @@ def _extract_front(strategy: Any, result: Any) -> list[Individual]:
     )
 
 
+def _individual_objectives(
+    ind: Individual,
+    method: str,
+    benchmark: CSVBenchmarkAPI,
+    dataset: str,
+    device: str,
+) -> tuple[float, float] | None:
+    if ind.fitness is None:
+        return None
+
+    if method != "dvolver":
+        acc, lat = ind.fitness
+        if acc != acc or lat != lat:
+            return None
+        return float(acc), float(lat)
+
+    # Dvolver fitness is (accuracy, speed). Convert to comparable latency metric.
+    acc = float(ind.fitness[0])
+    speed = float(ind.fitness[1])
+    if acc != acc or speed != speed:
+        return None
+
+    architecture = getattr(ind, "architecture", None)
+    if isinstance(architecture, dict):
+        genotype = architecture.get("benchmark_genotype")
+        if isinstance(genotype, list):
+            try:
+                lat = float(benchmark.query_latency(genotype, dataset, device))
+                if lat == lat:
+                    return acc, lat
+            except Exception:
+                pass
+
+    # Fallback when benchmark genotype is unavailable.
+    lat_proxy = 1.0 / max(speed, 1e-12)
+    return acc, float(lat_proxy)
+
+
 def _build_strategy(
     method: str,
-    search_space: CSVSearchSpace,
-    evaluator: Evaluator,
+    csv_path: Path,
+    dataset: str,
+    device: str,
     pop_size: int,
     budget: int,
 ):
+    benchmark = CSVBenchmarkAPI(str(csv_path))
+
     if method == "skyline":
+        search_space = CSVSearchSpace(str(csv_path))
+        evaluator = Evaluator(benchmark, dataset=dataset, device=device)
         return SkylineSearch(search_space=search_space, evaluator=evaluator)
     if method == "bruteforce":
+        search_space = CSVSearchSpace(str(csv_path))
+        evaluator = Evaluator(benchmark, dataset=dataset, device=device)
         return BruteForceParetoSearch(search_space=search_space, evaluator=evaluator)
     if method == "random":
+        search_space = CSVSearchSpace(str(csv_path))
+        evaluator = Evaluator(benchmark, dataset=dataset, device=device)
         population = Population(search_space, evaluator, size=pop_size)
         return RandomSearch(
             population=population,
@@ -88,6 +145,8 @@ def _build_strategy(
             budget=budget,
         )
     if method == "mowso":
+        search_space = CSVSearchSpace(str(csv_path))
+        evaluator = Evaluator(benchmark, dataset=dataset, device=device)
         return MOWSOSearch(
             search_space=search_space,
             evaluator=evaluator,
@@ -96,6 +155,8 @@ def _build_strategy(
             archive_size=50,
         )
     if method == "mosho":
+        search_space = CSVSearchSpace(str(csv_path))
+        evaluator = Evaluator(benchmark, dataset=dataset, device=device)
         return MOSHOSearch(
             search_space=search_space,
             evaluator=evaluator,
@@ -103,19 +164,75 @@ def _build_strategy(
             max_iterations=300,
             archive_size=50,
         )
+    if method == "dvolver":
+        search_space = CSVGenotypeDvolverSearchSpace(str(csv_path))
+        evaluator = DvolverEvaluator(
+            benchmark=benchmark,
+            dataset=dataset,
+            device=device,
+        )
+        termination = TerminationCriteria(
+            max_generations=max(1, budget),
+            max_evaluations=None,
+            hypervolume_patience=10,
+        )
+        return DvolverSearchStrategy(
+            population_size=pop_size,
+            crossover_prob=0.1,
+            mutation_prob=0.1,
+            search_space=search_space,
+            evaluator=evaluator,
+            termination=termination,
+        )
     raise ValueError(f"Unknown method: {method}")
 
 
-def _to_points(front: list[Individual]) -> list[tuple[float, float]]:
+def _to_points(
+    front: list[Individual],
+    method: str,
+    benchmark: CSVBenchmarkAPI,
+    dataset: str,
+    device: str,
+) -> list[tuple[float, float]]:
     points: list[tuple[float, float]] = []
     for ind in front:
-        if ind.fitness is None:
+        parsed = _individual_objectives(ind, method, benchmark, dataset, device)
+        if parsed is None:
             continue
-        acc, lat = ind.fitness
-        if acc != acc or lat != lat:
-            continue
+        acc, lat = parsed
         points.append((float(acc), float(lat)))
     return points
+
+
+def _save_method_comparison_plot(comparison_rows: list[dict[str, float]], output_path: Path) -> None:
+    if not comparison_rows:
+        return
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    methods = [row["method"] for row in comparison_rows]
+    hv_vals = [row["hv_mean"] for row in comparison_rows]
+    igd_vals = [row["igd_plus_mean"] for row in comparison_rows]
+    runtime_vals = [row["runtime_mean"] for row in comparison_rows]
+
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.5))
+    axes[0].bar(methods, hv_vals)
+    axes[0].set_title("Mean Normalized HV")
+    axes[0].set_ylabel("higher is better")
+    axes[0].tick_params(axis="x", rotation=30)
+
+    axes[1].bar(methods, igd_vals)
+    axes[1].set_title("Mean IGD+")
+    axes[1].set_ylabel("lower is better")
+    axes[1].tick_params(axis="x", rotation=30)
+
+    axes[2].bar(methods, runtime_vals)
+    axes[2].set_title("Mean Runtime (s)")
+    axes[2].set_ylabel("lower is better")
+    axes[2].tick_params(axis="x", rotation=30)
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=180)
+    plt.close(fig)
 
 
 def _contexts(datasets: tuple[str, ...], devices: tuple[str, ...]):
@@ -150,7 +267,7 @@ def run_analysis(
     datasets: tuple[str, ...],
     devices: tuple[str, ...],
     results_root: Path,
-) -> None:
+) -> dict[str, float]:
     out_dir = results_root / method
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -163,29 +280,40 @@ def run_analysis(
             random.seed(seed + run_id)
 
         for context_id, dataset, device in _contexts(datasets, devices):
-            search_space = CSVSearchSpace(str(csv_path))
             benchmark = CSVBenchmarkAPI(str(csv_path))
-            evaluator = Evaluator(benchmark, dataset=dataset, device=device)
-            strategy = _build_strategy(method, search_space, evaluator, pop_size, budget)
+            strategy = _build_strategy(
+                method=method,
+                csv_path=csv_path,
+                dataset=dataset,
+                device=device,
+                pop_size=pop_size,
+                budget=budget,
+            )
 
             t0 = time.perf_counter()
             result = strategy.run()
             runtime_s = time.perf_counter() - t0
             front = _extract_front(strategy, result)
-            points = _to_points(front)
+            points = _to_points(front, method, benchmark, dataset, device)
             fronts_by_context[context_id].append(points)
 
             best_acc = max((p[0] for p in points), default=float("nan"))
             best_lat = min((p[1] for p in points), default=float("nan"))
             evals = getattr(strategy, "evaluations", 0)
+            if method == "dvolver" and hasattr(strategy, "history"):
+                evals = getattr(strategy.history, "evaluation_count", evals)
 
             for ind in front:
-                if ind.fitness is None:
+                parsed = _individual_objectives(ind, method, benchmark, dataset, device)
+                if parsed is None:
                     continue
-                acc, lat = ind.fitness
-                if acc != acc or lat != lat:
-                    continue
-                arch_id = ind.metadata.get("arch_id") if ind.metadata else None
+                acc, lat = parsed
+                arch_id = None
+                if ind.metadata:
+                    arch_id = ind.metadata.get("arch_id")
+                architecture = getattr(ind, "architecture", None)
+                if arch_id is None and isinstance(architecture, dict):
+                    arch_id = architecture.get("arch_id")
                 pareto_rows.append([
                     str(run_id),
                     str(context_id),
@@ -408,16 +536,103 @@ def run_analysis(
     print(f"Context summary CSV: {metrics_csv}")
     print(f"Per-run metrics CSV: {per_run_csv}")
 
+    flat_vals = [v for vals in grouped.values() for v in vals]
+    if not flat_vals:
+        return {
+            "method": method,
+            "best_accuracy_mean": float("nan"),
+            "best_latency_mean": float("nan"),
+            "hv_mean": float("nan"),
+            "igd_plus_mean": float("nan"),
+            "c_metric_mean": float("nan"),
+            "runtime_mean": float("nan"),
+        }
+
+    return {
+        "method": method,
+        "best_accuracy_mean": mean(v["best_accuracy"] for v in flat_vals),
+        "best_latency_mean": mean(v["best_latency"] for v in flat_vals),
+        "hv_mean": mean(v["hv"] for v in flat_vals),
+        "igd_plus_mean": mean(v["igd_plus"] for v in flat_vals),
+        "c_metric_mean": mean(v["c_metric"] for v in flat_vals),
+        "runtime_mean": mean(v["runtime"] for v in flat_vals),
+    }
+
+
+def run_all_methods(
+    csv_path: Path,
+    runs: int,
+    pop_size: int,
+    budget: int,
+    seed: int | None,
+    datasets: tuple[str, ...],
+    devices: tuple[str, ...],
+    results_root: Path,
+) -> None:
+    comparison_rows: list[dict[str, float]] = []
+
+    for method in ALL_METHODS:
+        print(f"\n=== Running method: {method} ===")
+        summary = run_analysis(
+            method=method,
+            csv_path=csv_path,
+            runs=runs,
+            pop_size=pop_size,
+            budget=budget,
+            seed=seed,
+            datasets=datasets,
+            devices=devices,
+            results_root=results_root,
+        )
+        comparison_rows.append(summary)
+
+    comparison_rows.sort(key=lambda row: row["hv_mean"], reverse=True)
+
+    comparison_csv = results_root / "method_comparison_summary.csv"
+    _write_csv(
+        comparison_csv,
+        [
+            "method",
+            "best_accuracy_mean",
+            "best_latency_mean",
+            "hv_mean",
+            "igd_plus_mean",
+            "c_metric_mean",
+            "runtime_mean",
+        ],
+        [
+            [
+                str(row["method"]),
+                _fmt(row["best_accuracy_mean"]),
+                _fmt(row["best_latency_mean"]),
+                _fmt(row["hv_mean"]),
+                _fmt(row["igd_plus_mean"]),
+                _fmt(row["c_metric_mean"]),
+                _fmt(row["runtime_mean"]),
+            ]
+            for row in comparison_rows
+        ],
+    )
+
+    _save_method_comparison_plot(
+        comparison_rows,
+        results_root / "method_comparison.png",
+    )
+
+    print("\nAll methods completed.")
+    print(f"Comparison CSV: {comparison_csv}")
+    print(f"Comparison plot: {results_root / 'method_comparison.png'}")
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run one method on all contexts multiple times and export metrics + plots."
+        description="Run one or all methods on all contexts and export metrics + comparison plots."
     )
     parser.add_argument(
         "--method",
-        choices=["random", "bruteforce", "skyline", "mowso", "mosho"],
+        choices=[*ALL_METHODS, "all"],
         default="random",
-        help="Search strategy method to analyze.",
+        help="Search strategy method to analyze, or 'all' to run the full benchmark suite.",
     )
     parser.add_argument(
         "--csv",
@@ -443,14 +658,27 @@ if __name__ == "__main__":
     if not csv_path.exists():
         raise FileNotFoundError(f"CSV file not found: {csv_path}")
 
-    run_analysis(
-        method=args.method,
-        csv_path=csv_path,
-        runs=args.runs,
-        pop_size=args.pop_size,
-        budget=args.budget,
-        seed=args.seed,
-        datasets=DEFAULT_DATASETS,
-        devices=DEFAULT_DEVICES,
-        results_root=_resolve_path(args.results_root),
-    )
+    results_root = _resolve_path(args.results_root)
+    if args.method == "all":
+        run_all_methods(
+            csv_path=csv_path,
+            runs=args.runs,
+            pop_size=args.pop_size,
+            budget=args.budget,
+            seed=args.seed,
+            datasets=DEFAULT_DATASETS,
+            devices=DEFAULT_DEVICES,
+            results_root=results_root,
+        )
+    else:
+        run_analysis(
+            method=args.method,
+            csv_path=csv_path,
+            runs=args.runs,
+            pop_size=args.pop_size,
+            budget=args.budget,
+            seed=args.seed,
+            datasets=DEFAULT_DATASETS,
+            devices=DEFAULT_DEVICES,
+            results_root=results_root,
+        )

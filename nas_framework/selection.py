@@ -1,7 +1,7 @@
 ﻿from abc import ABC, abstractmethod
 import random
 from nas_framework.population import Individual
-from nas_framework.mo_utils import assign_rank_and_crowding, pareto_sort_key
+from nas_framework.mo_utils import assign_rank_and_crowding, pareto_sort_key, crowded_comparison
 
 
 class Selection(ABC):
@@ -40,4 +40,18 @@ class RouletteWheelSelection(Selection):
     def select(self, individuals: list[Individual], n: int,
                objective_directions: tuple[int, ...]) -> list[Individual]:
         return self._delegate.select(individuals, n, objective_directions)
+
+
+class BinaryTournamentSelection:
+    """Dvolver binary tournament using crowded-comparison operator."""
+
+    def select_parents(self, population: list[Individual], n: int) -> list[Individual]:
+        if not population:
+            return []
+
+        selected: list[Individual] = []
+        for _ in range(n):
+            a, b = random.sample(population, 2) if len(population) >= 2 else (population[0], population[0])
+            selected.append(a if crowded_comparison(a, b) else b)
+        return selected
 
