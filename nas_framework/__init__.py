@@ -17,7 +17,7 @@ from nas_framework.history import History, HistoryEntry
 from nas_framework.search_strategy import (
     SearchStrategy, GeneticAlgorithm, EvolutionStrategy, RandomSearch,
     BruteForceParetoSearch, SkylineSearch, MOWSOSearch, MOSHOSearch,
-    AQPSOSearch, APSOESearch,
+    APSOESearch,
 )
 
 __all__ = [

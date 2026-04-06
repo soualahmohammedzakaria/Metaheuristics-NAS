@@ -1106,22 +1106,31 @@ class ABCSearchStrategy(SearchStrategy):
         recovering wasted budget from duplicate neighbor samples.
         At large budgets (500+), 20-39% of neighbor samples are duplicates
         without this guard.
+        
+        IMPORTANT: Evaluations counter is incremented on EVERY call (including 
+        cache hits), not just new architectures. This ensures the termination 
+        condition can be met even when the search saturates the neighborhood.
         """
         key = tuple(individual.genotype)
         if key in self._visited:
-            # Retrieve cached fitness without spending an evaluation.
+            # Retrieve cached fitness without spending a new evaluation call.
             individual.fitness = self._visited[key]
             if hasattr(self.population.search_space, "metadata_from_genotype"):
                 individual.metadata = (
                     self.population.search_space.metadata_from_genotype(individual.genotype)
                 )
-            return  # do NOT increment self.evaluations
-        individual.fitness = self.evaluator.evaluate(individual.genotype)
-        if hasattr(self.population.search_space, "metadata_from_genotype"):
-            individual.metadata = (
-                self.population.search_space.metadata_from_genotype(individual.genotype)
-            )
-        self._visited[key] = individual.fitness
+        else:
+            # New architecture - evaluate and cache it
+            individual.fitness = self.evaluator.evaluate(individual.genotype)
+            if hasattr(self.population.search_space, "metadata_from_genotype"):
+                individual.metadata = (
+                    self.population.search_space.metadata_from_genotype(individual.genotype)
+                )
+            self._visited[key] = individual.fitness
+        
+        # CRITICAL FIX: Increment on EVERY _eval_individual attempt.
+        # This ensures the evaluation budget and termination condition work correctly
+        # even when the search saturates and samples mostly duplicate neighbors.
         self.evaluations += 1
 
     def _employee_phase(self) -> None:
@@ -1920,9 +1929,8 @@ class MBOSearchStrategy(SearchStrategy):
 
         return self.population
 
-
-
-# =============================================================================
+class APSOESearch:
+    # =============================================================================
 # APSO-E: Archive-Guided PSO with Elite Perturbation
 # =============================================================================
 # Bottlenecks diagnosed in ABC / Firefly / PSO / HybridMBO and addressed here:
@@ -1958,7 +1966,6 @@ class MBOSearchStrategy(SearchStrategy):
 #      after all population members reach the same accuracy level.
 # =============================================================================
 
-class APSOESearch:
     """Archive-Guided PSO with Elite Perturbation (APSO-E).
 
     A population-based multi-objective NAS strategy that surgically addresses
@@ -2357,7 +2364,6 @@ class APSOESearch:
         return [Individual(ind.genotype[:], ind.fitness, ind.metadata.copy())
                 for ind in self.archive]
 
-
 class NSGA2SearchStrategy(SearchStrategy):
     """NSGA-II: Non-dominated Sorting Genetic Algorithm II for NAS."""
 
@@ -2428,9 +2434,6 @@ class NSGA2SearchStrategy(SearchStrategy):
             self._record_history()
 
         return self.population
-
-
-
 
 class ABCFireflyStrategy:
     """ABC-Firefly hybrid for multi-objective NAS.
