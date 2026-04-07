@@ -24,7 +24,7 @@ from nas_framework.replacement import ElitistReplacement, CrowdingReplacement, R
 from nas_framework.search_space import CSVSearchSpace
 from nas_framework.search_strategy import ABCFireflyStrategy,BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch, MOSHOSearch, PSOSearchStrategy, ABCSearchStrategy, FireflySearchStrategy, HybridMBOStrategy,  APSOESearch, NSGA2SearchStrategy
 from nas_framework.selection import TournamentSelection, RouletteWheelSelection
-from utilities.metrics import c_metric, hypervolume_2d, normalized_hypervolume_2d, igd_plus, non_dominated
+from utilities.metrics import c_metric, igd_plus, non_dominated, normalized_hypervolume_to_reference_2d
 from utilities.plotting import (
     save_context_metric_heatmap,
     save_hv_boxplot,
@@ -304,7 +304,6 @@ def run_analysis(
     # Build reference fronts and reference points per context from all runs.
     reference_front_by_context: dict[int, list[tuple[float, float]]] = {}
     ref_point_by_context: dict[int, tuple[float, float]] = {}
-    ideal_point_by_context: dict[int, tuple[float, float]] = {}
     for context_id, runs_fronts in fronts_by_context.items():
         union_points = [p for front in runs_fronts for p in front]
         reference_front = non_dominated(union_points, OBJECTIVE_DIRECTIONS)
@@ -317,14 +316,6 @@ def run_analysis(
             ref_point_by_context[context_id] = (min_acc - 1e-9, max_lat + 1e-9)
         else:
             ref_point_by_context[context_id] = (0.0, 0.0)
-        
-        # Compute ideal point from reference front
-        if reference_front:
-            ideal_acc = max(p[0] for p in reference_front)  # best (max) accuracy
-            ideal_lat = min(p[1] for p in reference_front)  # best (min) latency
-            ideal_point_by_context[context_id] = (ideal_acc, ideal_lat)
-        else:
-            ideal_point_by_context[context_id] = (0.0, 0.0)
 
     # Compute metrics per run/context.
     metrics_rows: list[list[str]] = []
@@ -337,9 +328,13 @@ def run_analysis(
         points = rec["points"]
         reference_front = reference_front_by_context[cid]
         ref_point = ref_point_by_context[cid]
-        ideal_point = ideal_point_by_context[cid]
 
-        hv = normalized_hypervolume_2d(points, OBJECTIVE_DIRECTIONS, ref_point, ideal_point)
+        hv = normalized_hypervolume_to_reference_2d(
+            points,
+            reference_front,
+            OBJECTIVE_DIRECTIONS,
+            ref_point,
+        )
         igd_p = igd_plus(points, reference_front, OBJECTIVE_DIRECTIONS)
         c_val = c_metric(points, reference_front, OBJECTIVE_DIRECTIONS)
         runtime_s = rec["runtime"]
