@@ -88,5 +88,4 @@ Desktop.ini
 *.sqlite3
 *.db
 
-# Project-generated outputs
-experiments/results/
+
