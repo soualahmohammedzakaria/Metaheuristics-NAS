@@ -119,6 +119,32 @@ def normalized_hypervolume_2d(
     return raw_hv / max_hv
 
 
+def normalized_hypervolume_to_reference_2d(
+    front: Iterable[Point2D],
+    reference_front: Iterable[Point2D],
+    directions: tuple[int, int],
+    reference_point: Point2D,
+) -> float:
+    """Normalize HV by the HV of a fixed reference Pareto front.
+
+    This metric is easier to interpret for method-vs-reference comparisons:
+    the reference front gets a score of 1.0 (up to floating-point noise).
+    """
+    raw_hv = hypervolume_2d(front, directions, reference_point)
+    ref_hv = hypervolume_2d(reference_front, directions, reference_point)
+
+    if ref_hv <= 0.0:
+        return 0.0
+
+    ratio = raw_hv / ref_hv
+    if ratio < 0.0:
+        return 0.0
+    if ratio > 1.0:
+        # Clip tiny floating-point overshoots above 1.
+        return 1.0
+    return ratio
+
+
 def igd_plus(
     front: Iterable[Point2D],
     reference_front: Iterable[Point2D],

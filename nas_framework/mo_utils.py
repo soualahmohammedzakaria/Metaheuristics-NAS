@@ -178,3 +178,90 @@ def exact_pareto_front_2d(individuals: Iterable[Individual],
     crowding_distance(front, directions)
     return front
 
+
+# ---------------------------------------------------------------------------
+# Rank-based scalar scoring  (RB-IFA, Nguyen et al., ICAART 2025)
+# ---------------------------------------------------------------------------
+
+def rank_based_score(individuals: list["Individual"],
+                     directions: tuple[int, ...],
+                     w_perf: float = 0.5) -> list[float]:
+    """Compute a scalar rank score for each individual (Eq. 6 of RB-IFA).
+
+    Instead of building a Pareto front, each objective is ranked
+    independently and the ranks are combined into a single weighted sum:
+
+        R_solution = mean(R_perf_objectives) * w_perf
+                   + mean(R_cost_objectives) * w_cost
+
+    where w_perf + w_cost = 1.
+
+    Convention used here (consistent with the paper):
+      - Objectives with direction +1 (maximise, e.g. accuracy) are
+        performance objectives.  Rank 1 = highest value = best.
+      - Objectives with direction -1 (minimise, e.g. latency) are cost
+        objectives.  Rank 1 = lowest value = best.
+
+    The lower the returned score, the better the individual.
+
+    Parameters
+    ----------
+    individuals : list of Individual with non-None fitness.
+    directions  : per-objective direction (+1 maximise, -1 minimise).
+    w_perf      : weight given to performance objectives (default 0.5).
+                  Cost weight is derived as 1 - w_perf.
+
+    Returns
+    -------
+    List of float scores in the same order as *individuals*.
+    Lower score = better individual.
+    """
+    w_cost = 1.0 - w_perf
+    eligible = [ind for ind in individuals if ind.fitness is not None]
+    if not eligible:
+        return [0.0] * len(individuals)
+
+    n = len(eligible)
+    n_obj = len(eligible[0].fitness)
+
+    perf_cols = [o for o in range(n_obj) if o < len(directions) and directions[o] == 1]
+    cost_cols = [o for o in range(n_obj) if o < len(directions) and directions[o] == -1]
+
+    # Fallback: treat all as performance if no cost objective defined.
+    if not perf_cols:
+        perf_cols = list(range(n_obj))
+    if not cost_cols:
+        w_cost = 0.0
+
+    # Rank each objective independently (rank 1 = best).
+    obj_ranks: list[list[float]] = []
+    for o in range(n_obj):
+        direction = directions[o] if o < len(directions) else 1
+        # Sort descending for perf (+1), ascending for cost (-1).
+        sorted_inds = sorted(
+            range(n), key=lambda i: eligible[i].fitness[o] * direction, reverse=True
+        )
+        ranks = [0.0] * n
+        for rank, idx in enumerate(sorted_inds):
+            ranks[idx] = float(rank + 1)
+        obj_ranks.append(ranks)
+
+    scores: list[float] = []
+    for i in range(n):
+        perf_rank = (sum(obj_ranks[o][i] for o in perf_cols) / len(perf_cols)
+                     if perf_cols else 0.0)
+        cost_rank = (sum(obj_ranks[o][i] for o in cost_cols) / len(cost_cols)
+                     if cost_cols else 0.0)
+        scores.append(perf_rank * w_perf + cost_rank * w_cost)
+
+    # Map back to the original individuals list (non-eligible get worst score).
+    worst = float(n + 1)
+    eligible_set = set(id(ind) for ind in eligible)
+    eligible_scores = iter(scores)
+    result = []
+    for ind in individuals:
+        if id(ind) in eligible_set:
+            result.append(next(eligible_scores))
+        else:
+            result.append(worst)
+    return result
