@@ -22,7 +22,7 @@ from nas_framework.mutation import SinglePointMutation, GaussianMutation, ABCNei
 from nas_framework.population import Individual, Population, PSOPopulation, ABCPopulation
 from nas_framework.replacement import ElitistReplacement, CrowdingReplacement, RankBasedReplacement
 from nas_framework.search_space import CSVSearchSpace
-from nas_framework.search_strategy import ABCFireflyStrategy,BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch, MOSHOSearch, PSOSearchStrategy, ABCSearchStrategy, FireflySearchStrategy, HybridMBOStrategy,  APSOESearch, NSGA2SearchStrategy
+from nas_framework.search_strategy import ABCFireflyStrategy,BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch, MOSHOSearch, MOSHOEnhancedSearch, PSOSearchStrategy, ABCSearchStrategy, FireflySearchStrategy, HybridMBOStrategy,  APSOESearch, NSGA2SearchStrategy
 from nas_framework.selection import TournamentSelection, RouletteWheelSelection
 from utilities.metrics import c_metric, igd_plus, non_dominated, normalized_hypervolume_to_reference_2d
 from utilities.plotting import (
@@ -97,6 +97,14 @@ def _build_strategy(
         )
     if method == "mosho":
         return MOSHOSearch(
+            search_space=search_space,
+            evaluator=evaluator,
+            pop_size=pop_size,
+            max_iterations=max(1, budget // pop_size),
+            archive_size=pop_size,
+        )
+    if method == "mosho_enhanced":
+        return MOSHOEnhancedSearch(
             search_space=search_space,
             evaluator=evaluator,
             pop_size=pop_size,
@@ -500,7 +508,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--method",
-        choices=["random", "bruteforce", "skyline", "mowso", "mosho", "abc_firefly", "pso", "abc", "firefly", "hybrid_mbo", "apso_e", "nsga2"],
+        choices=["random", "bruteforce", "skyline", "mowso", "mosho", "mosho_enhanced", "abc_firefly", "pso", "abc", "firefly", "hybrid_mbo", "apso_e", "nsga2"],
         default="random",
         help="Search strategy method to analyze.",
     )

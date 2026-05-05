@@ -17,6 +17,7 @@ from nas_framework.history import History, HistoryEntry
 from nas_framework.search_strategy import (
     SearchStrategy, GeneticAlgorithm, EvolutionStrategy, RandomSearch,
     BruteForceParetoSearch, SkylineSearch, MOWSOSearch, MOSHOSearch,
+    MOSHOEnhancedSearch,
     APSOESearch,
 )
 
@@ -35,6 +36,7 @@ __all__ = [
     "CompositeTermination", "History", "HistoryEntry",
     "SearchStrategy", "GeneticAlgorithm", "EvolutionStrategy", "RandomSearch",
     "BruteForceParetoSearch", "SkylineSearch", "MOWSOSearch", "MOSHOSearch",
+    "MOSHOEnhancedSearch",
     "AQPSOSearch", "APSOESearch",
 ]
 

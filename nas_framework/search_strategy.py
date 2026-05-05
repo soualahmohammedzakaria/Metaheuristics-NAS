@@ -1,7 +1,8 @@
-import random 
+﻿import random 
 from abc import ABC, abstractmethod
 import math
 import random
+import numpy as np
 from nas_framework.population import Population, ABCPopulation, FoodSource, Individual, ABCPopulation, FoodSource
 from nas_framework.selection import Selection,TournamentSelection, NeighborSelection, GuidanceSelection
 from nas_framework.variation import Variation, MutationOnlyVariation, CrossoverMutationVariation
@@ -960,6 +961,292 @@ class MOSHOSearch:
             )
 
         return [self._clone_individual(ind) for ind in self.archive]
+
+
+class MOSHOEnhancedSearch(MOSHOSearch):
+    """MOSHO with clustered archive sampling and robustness safeguards."""
+
+    def __init__(
+        self,
+        search_space: SearchSpace,
+        evaluator: Evaluator,
+        pop_size: int = 50,
+        max_iterations: int = 300,
+        archive_size: int | None = None,
+        e0: float = 1.0,
+        e_min: float = 0.1,
+        e_max: float = 2.0,
+        eta: float = 15.0,
+        delta: float = 0.03,
+        history: History | None = None,
+        cluster_threshold: int = 100000,
+        kmeans_min_archive: int = 20,
+        kmeans_k: int | None = None,
+        kmeans_max_iter: int = 12,
+        kmeans_refresh: int = 4,
+        latency_stagnation_eps: float = 1e-3,
+        latency_excellent_quantile: float = 0.1,
+        mono_patience: int = 3,
+        mono_refresh_interval: int = 12,
+    ):
+        super().__init__(
+            search_space=search_space,
+            evaluator=evaluator,
+            pop_size=pop_size,
+            max_iterations=max_iterations,
+            archive_size=archive_size,
+            e0=e0,
+            e_min=e_min,
+            e_max=e_max,
+            eta=eta,
+            delta=delta,
+            history=history,
+        )
+
+        self.cluster_threshold = cluster_threshold
+        self.kmeans_min_archive = kmeans_min_archive
+        self.kmeans_k = kmeans_k
+        self.kmeans_max_iter = kmeans_max_iter
+        self.kmeans_refresh = kmeans_refresh
+
+        self.latency_stagnation_eps = latency_stagnation_eps
+        self.latency_excellent_quantile = latency_excellent_quantile
+        self.mono_patience = mono_patience
+        self.mono_refresh_interval = mono_refresh_interval
+
+        self._mono_mode: int | None = None
+        self._mono_active = False
+        self._mono_counter = 0
+        self._mono_refresh_counter = 0
+
+        self._cluster_dirty = True
+        self._cluster_refresh_counter = 0
+        self._cluster_members: list[list[int]] | None = None
+
+        self._sampler_refresh_generation = -1
+
+        self._use_cluster_sampling = (
+            self._estimate_search_space_size() >= self.cluster_threshold
+        )
+
+    def _estimate_search_space_size(self) -> int:
+        try:
+            return int(self.search_space.num_ops) ** int(self.search_space.num_edges)
+        except Exception:
+            return 0
+
+    def _archive_update(self, candidate: Individual) -> bool:
+        changed = super()._archive_update(candidate)
+        if changed:
+            self._cluster_dirty = True
+        return changed
+
+    def _truncate_archive(self) -> None:
+        if len(self.archive) <= self.archive_size:
+            return
+
+        n_obj = len(self.evaluator.objective_directions)
+        scores = [0.0 for _ in self.archive]
+        extreme_idx: set[int] = set()
+
+        for obj in range(n_obj):
+            direction = self.evaluator.objective_directions[obj]
+            order = sorted(
+                range(len(self.archive)),
+                key=lambda i: self.archive[i].fitness[obj] * direction,
+            )
+            if not order:
+                continue
+
+            low_idx = order[0]
+            high_idx = order[-1]
+            extreme_idx.add(low_idx)
+            extreme_idx.add(high_idx)
+
+            scores[low_idx] = float("inf")
+            scores[high_idx] = float("inf")
+
+            min_v = self.archive[low_idx].fitness[obj] * direction
+            max_v = self.archive[high_idx].fitness[obj] * direction
+            if max_v == min_v:
+                continue
+
+            for k in range(1, len(order) - 1):
+                idx = order[k]
+                if scores[idx] == float("inf"):
+                    continue
+                prev_v = self.archive[order[k - 1]].fitness[obj] * direction
+                next_v = self.archive[order[k + 1]].fitness[obj] * direction
+                scores[idx] += (next_v - prev_v) / (max_v - min_v)
+
+        order = sorted(range(len(self.archive)), key=lambda i: scores[i], reverse=True)
+        if len(extreme_idx) >= self.archive_size:
+            keep_idx = set(sorted(extreme_idx, key=lambda i: scores[i], reverse=True)[: self.archive_size])
+        else:
+            keep_idx = set(extreme_idx)
+            for idx in order:
+                if idx in keep_idx:
+                    continue
+                keep_idx.add(idx)
+                if len(keep_idx) >= self.archive_size:
+                    break
+
+        self.archive = [self.archive[i] for i in range(len(self.archive)) if i in keep_idx]
+        self._archive_sampler_dirty = True
+        self._cluster_dirty = True
+
+    def _refresh_cluster_cache(self) -> None:
+        if not self._use_cluster_sampling:
+            self._cluster_members = None
+            return
+        if len(self.archive) < self.kmeans_min_archive:
+            self._cluster_members = None
+            return
+
+        if not self._cluster_dirty and self._cluster_refresh_counter > 0:
+            self._cluster_refresh_counter -= 1
+            return
+
+        fitness = np.array([ind.fitness for ind in self.archive], dtype=float)
+        if fitness.size == 0:
+            self._cluster_members = None
+            return
+
+        directions = np.array(self.evaluator.objective_directions, dtype=float)
+        fitness = fitness * directions
+
+        mins = fitness.min(axis=0)
+        maxs = fitness.max(axis=0)
+        denom = np.where(maxs - mins > 0, maxs - mins, 1.0)
+        norm = (fitness - mins) / denom
+
+        n = norm.shape[0]
+        k = self.kmeans_k or max(2, int(round(math.sqrt(n))))
+        k = min(k, n)
+        if k < 2:
+            self._cluster_members = None
+            return
+
+        labels = self._kmeans(norm, k)
+        clusters = [[] for _ in range(k)]
+        for idx, label in enumerate(labels):
+            clusters[int(label)].append(idx)
+
+        self._cluster_members = [c for c in clusters if c]
+        self._cluster_dirty = False
+        self._cluster_refresh_counter = self.kmeans_refresh
+
+    def _kmeans(self, data: np.ndarray, k: int) -> np.ndarray:
+        n = data.shape[0]
+        init_idx = random.sample(range(n), k)
+        centroids = data[init_idx].copy()
+        labels = np.zeros(n, dtype=int)
+
+        for _ in range(self.kmeans_max_iter):
+            dists = ((data[:, None, :] - centroids[None, :, :]) ** 2).sum(axis=2)
+            new_labels = np.argmin(dists, axis=1)
+            if np.array_equal(new_labels, labels):
+                break
+            labels = new_labels
+            for c in range(k):
+                members = data[labels == c]
+                if len(members) == 0:
+                    centroids[c] = data[random.randrange(n)]
+                else:
+                    centroids[c] = members.mean(axis=0)
+        return labels
+
+    def _sample_archive(self) -> Individual:
+        if not self.archive:
+            raise ValueError("Cannot sample from an empty archive.")
+
+        needs_refresh = (
+            self._archive_sampler_dirty
+            or len(self._archive_sampler_weights) != len(self.archive)
+        )
+        if needs_refresh and self.generations != self._sampler_refresh_generation:
+            self._refresh_archive_sampler()
+            self._sampler_refresh_generation = self.generations
+
+        weights_ok = len(self._archive_sampler_weights) == len(self.archive)
+
+        self._refresh_cluster_cache()
+        if not self._cluster_members:
+            if weights_ok:
+                return random.choices(self.archive, weights=self._archive_sampler_weights, k=1)[0]
+            return random.choice(self.archive)
+
+        cluster = random.choice(self._cluster_members)
+        if weights_ok:
+            weights = [self._archive_sampler_weights[i] for i in cluster]
+            idx = random.choices(cluster, weights=weights, k=1)[0]
+        else:
+            idx = random.choice(cluster)
+        return self.archive[idx]
+
+    def _update_mono_objective_mode(self) -> None:
+        if len(self.archive) < 3:
+            self._mono_mode = None
+            self._mono_active = False
+            self._mono_counter = 0
+            return
+
+        dirs = self.evaluator.objective_directions
+        if len(dirs) < 2:
+            self._mono_mode = None
+            self._mono_active = False
+            self._mono_counter = 0
+            return
+
+        lat_idx = 1
+        lats = [ind.fitness[lat_idx] for ind in self.archive if ind.fitness is not None]
+        if not lats:
+            self._mono_mode = None
+            self._mono_active = False
+            self._mono_counter = 0
+            return
+
+        lat_range = max(lats) - min(lats)
+        if lat_range <= self.latency_stagnation_eps:
+            q = float(np.quantile(lats, self.latency_excellent_quantile))
+            if min(lats) <= q:
+                acc_idx = next((i for i, d in enumerate(dirs) if d > 0), 0)
+                if self._mono_mode == acc_idx:
+                    self._mono_counter += 1
+                else:
+                    self._mono_mode = acc_idx
+                    self._mono_counter = 1
+                self._mono_active = self._mono_counter >= self.mono_patience
+                return
+
+        self._mono_mode = None
+        self._mono_active = False
+        self._mono_counter = 0
+
+    def _accept(
+        self,
+        current: Individual,
+        candidate: Individual,
+        archive_improved: bool,
+        progress: float,
+    ) -> bool:
+        if self._mono_refresh_counter <= 0:
+            self._update_mono_objective_mode()
+            self._mono_refresh_counter = self.mono_refresh_interval
+        else:
+            self._mono_refresh_counter -= 1
+
+        if self._mono_active and self._mono_mode is not None:
+            obj = self._mono_mode
+            direction = self.evaluator.objective_directions[obj]
+            if candidate.fitness[obj] * direction > current.fitness[obj] * direction:
+                return True
+            if archive_improved:
+                return True
+            accept_prob = 0.2 * (1.0 - 0.7 * progress)
+            return random.random() < accept_prob
+
+        return super()._accept(current, candidate, archive_improved, progress)
 
 
 class GeneticAlgorithmNG(SearchStrategy):
