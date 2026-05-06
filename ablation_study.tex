@@ -1,0 +1,954 @@
+% ============================================================
+%  MOSHO — Ablation Study  (Reorganised)
+%  Metrics : IGD+, nHV, Spacing, Exec-Time
+%  Units   : U01–U07 (base) · U08, U10, U11 (advanced)
+% ============================================================
+\documentclass[11pt,a4paper]{article}
+
+% ---------- packages ----------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage{makecell}
+\usepackage{rotating}
+\usepackage{pdflscape}
+\usepackage{float}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{pgfplotstable}
+\usepackage{siunitx}
+\usepackage{boldline}
+\usepackage{longtable}
+\usepackage{pifont}
+
+% ---------- colours ----------
+\definecolor{critred}{HTML}{C0392B}
+\definecolor{imptorange}{HTML}{E67E22}
+\definecolor{modblue}{HTML}{2980B9}
+\definecolor{marggreen}{HTML}{27AE60}
+\definecolor{rowgray}{HTML}{F2F2F2}
+\definecolor{headerblue}{HTML}{1A3A5C}
+\definecolor{bestgreen}{HTML}{D5F5E3}
+\definecolor{worstred}{HTML}{FADBD8}
+\definecolor{pipelinered}{HTML}{E74C3C}
+\definecolor{pipelineorange}{HTML}{E67E22}
+\definecolor{pipelineyellow}{HTML}{F39C12}
+\definecolor{pipelinegreen}{HTML}{27AE60}
+
+% ---------- helpers ----------
+\newcommand{\up}{\textcolor{critred}{$\uparrow$}}
+\newcommand{\dn}{\textcolor{marggreen}{$\downarrow$}}
+\newcommand{\best}[1]{\cellcolor{bestgreen}\textbf{#1}}
+\newcommand{\worst}[1]{\cellcolor{worstred}{#1}}
+\newcommand{\mosho}{\textsc{Mosho}}
+\newcommand{\mowso}{\textsc{Mowso}}
+\newcommand{\ablof}[1]{\texttt{ABL-#1}}
+
+% ---------- contribution-tier labels ----------
+\newcommand{\critical}[1]{\textbf{\textcolor{critred}{#1}}}
+\newcommand{\important}[1]{\textbf{\textcolor{imptorange}{#1}}}
+\newcommand{\secondary}[1]{\textbf{\textcolor{modblue}{#1}}}
+\newcommand{\neutral}[1]{\textcolor{gray}{#1}}
+
+% ---------- pipeline step labels ----------
+\newcommand{\stepmand}[2]{%
+  \noindent\textcolor{#1}{\rule{3pt}{10pt}}\;%
+  \textbf{#2}\quad\textit{(Mandatory)}}
+\newcommand{\stepopt}[1]{%
+  \noindent\textcolor{pipelinegreen}{\rule{3pt}{10pt}}\;%
+  \textbf{#1}\quad\textit{(Optional --- recommended)}}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=headerblue,
+  citecolor=headerblue,
+  urlcolor=headerblue,
+  pdftitle={MOSHO Ablation Study},
+  pdfauthor={},
+}
+
+% ============================================================
+\begin{document}
+
+% ------------------------------------------------------------ title page
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\color{headerblue}\rule{\linewidth}{1.5pt}}\\[6pt]
+  {\LARGE\bfseries\color{headerblue}
+    Ablation Study\\[4pt]
+    \mosho{} --- Multi-Objective Shark Hunting Optimization\\[4pt]
+    for Neural Architecture Search}\\[6pt]
+  {\color{headerblue}\rule{\linewidth}{1.5pt}}\\[1.5cm]
+  {\large\itshape Rigorous evaluation of the individual and combined
+   contribution\\of the ten algorithmic units}\\[2cm]
+ 
+  {\small\color{gray} Draft --- filled from \texttt{experiments/results\_ablation\_study}}
+\end{titlepage}
+
+\tableofcontents
+\clearpage
+
+% ============================================================
+\section{Introduction}
+\label{sec:intro}
+% ============================================================
+
+\subsection{Overview and Objectives}
+\label{sec:intro_overview}
+
+This document describes the ablation study protocol for \mosho{}, a
+multi-objective meta-heuristic designed for Neural Architecture Search
+(NAS). \mosho{} incorporates \textbf{ten algorithmic units} beyond its
+predecessor \mowso{}: seven constituting the \emph{base layer} (U01--U07)
+and three constituting the \emph{advanced layer} (U08, U10, U11).
+
+The study isolates and quantifies the individual contribution of each unit
+through controlled one-at-a-time (OAT) ablations, group ablations, and
+rigorous statistical validation.  Four complementary metrics are used
+throughout: IGD$^+$, normalised hypervolume (nHV), Spacing, and execution
+time.  The central questions addressed are:
+
+\begin{enumerate}[leftmargin=2em, itemsep=3pt]
+  \item Does removing unit $U_i$ significantly degrade performance?
+  \item What is the \emph{magnitude} of each unit's individual contribution?
+  \item Do any pairs or groups of units interact super-additively?
+ 
+\end{enumerate}
+
+\subsection{Description of the Algorithmic Units}
+\label{sec:intro_units}
+
+
+\begin{longtable}{>{\bfseries\ttfamily}p{1.0cm} p{2.8cm} p{5.4cm} p{4.4cm}}
+\toprule
+\textbf{Code} & \textbf{Name} &
+\textbf{Description in \mosho{}} & \textbf{Ablation replacement} \\
+\midrule
+\endfirsthead
+\multicolumn{4}{l}{\small\itshape (continued)}\\
+\toprule
+\textbf{Code} & \textbf{Name} &
+\textbf{Description in \mosho{}} & \textbf{Ablation replacement} \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+
+U01 & Discrete kernels &
+  Six integer operators (Patrol, Scent, Circle, Burst, Crossover, Scout)
+  producing valid architecture vectors directly, without rounding. &
+  Continuous update $\mathbf{x}(t{+}1) = \mathbf{x}(t)+\mathbf{v}(t{+}1)$
+  followed by quantisation $Q(\cdot)$ (\mowso{} behaviour). \\[4pt]
+
+U02 & Uniform crossover &
+  Gene-by-gene mixing with a partner ($p{=}0.5$ per gene) followed by
+  single-gene mutation ($p{=}0.3$). &
+  No crossover --- each agent moves independently (\mowso{} behaviour). \\[4pt]
+
+U03 & Deferred truncation &
+  Dominance check $O(A)$ inside the loop; one crowding-distance pass
+  $O(A\log A)$ at end of iteration. &
+  True-distance recomputed after every insertion; complexity
+  $O(N{\cdot}A^3)$ per iteration (\mowso{} behaviour). \\[4pt]
+
+U04 & Explicit acceptance &
+  Three-case rule: (1)~dominance $\Rightarrow$ always accepted;
+  (2)~archive improvement $\Rightarrow$ accepted;
+  (3)~mutual non-dominance $\Rightarrow$ $p{=}0.4{\times}(1{-}0.7p_t)$. &
+  Unconditional acceptance of any candidate (\mowso{} behaviour). \\[4pt]
+
+U05 & Energy + restart &
+  Energy $e_i\!\in\![0,e_{\max}]$ updated each step
+  ($\beta_1{=}0.20$ if archive improved, $\beta_2{=}0.05$ otherwise,
+  $\delta{=}0.0968$ if rejected); restart when $e_i<e_{\min}{=}0.508$. &
+  No restart --- stagnant agents remain blocked indefinitely
+  (\mowso{} behaviour). \\[4pt]
+
+U06 & Dual adaptive signal &
+  $\boldsymbol{\pi}(t)=\mathrm{Normalise}(\boldsymbol{\pi}_0\odot
+  g(r_t,p_t))$ adapted according to improvement rate $r_t$
+  (window $H{=}20$) and progress $p_t{=}\text{evals}/B$. &
+  Fixed exponential decays for $p_1,p_2$, independent of runtime state
+  (\mowso{} behaviour). \\[4pt]
+
+U07 & Active archive &
+  Archive drives: (i)~operator probabilities via $r_t$,
+  (ii)~restarts by recombination, (iii)~acceptance decisions (Case~2). &
+  Passive archive: stores non-dominated solutions and provides
+  a single leader (max true distance) (\mowso{} behaviour). \\[4pt]
+
+
+U08 & K-means archive &
+  K-means on normalised objective vectors
+  ($K=\max(2,\mathrm{round}(\sqrt{|A|}))$ when $|A|\ge 20$).
+  Cluster $C_k$ selected with $P(C_k)\propto 1/|C_k|$,
+  then uniform draw within $C_k$. &
+  Uniform sampling from archive (each solution equally probable). \\[4pt]
+
+U10 & Extreme solutions &
+  Registry $\mathbf{x}_{\mathrm{ext}}=\arg\min/\max f_i$ per objective.
+  Excluded from truncation; local refinement budget allocated. &
+  No protection --- boundary solutions may be removed by standard
+  crowding-distance truncation. \\[4pt]
+
+U11 & Mono-objective fallback &
+  Latency degeneracy detection: if the archive latency range is below
+  $\varepsilon{=}10^{-3}$ for three checks, switch acceptance toward the
+  accuracy objective. &
+  No detection --- algorithm continues in multi-objective mode even when
+  one objective collapses. \\
+\end{longtable}
+
+
+
+
+% ============================================================
+\section{Study Design}
+\label{sec:design}
+% ============================================================
+
+\subsection{Ablation Variants}
+\label{sec:design_variants}
+
+The configured ablation variants are summarised in Table~\ref{tab:variants}.
+A~\checkmark\ indicates the unit is \emph{active}; a cross~$\times$ means
+it is replaced by its \mowso{}-equivalent reference.  The matrix is
+organised in three blocks: (i)~reference configurations, (ii)~OAT
+ablations (one unit disabled at a time), and (iii)~group ablations
+(multiple units disabled simultaneously).  The current execution includes
+full \mosho{}, MOSHO-Base, all OAT ablations, and all group ablations;
+\mowso{} is shown as a reference design but was not run in
+\texttt{results\_ablation\_study}.
+
+\begin{table}[H]
+\centering
+\caption{Complete binary matrix of ablation variants
+  (\checkmark~= active, $\times$~= disabled).}
+\label{tab:variants}
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.15}
+\small
+\begin{tabular}{l *{10}{c}}
+\toprule
+\textbf{Variant} &
+  \textbf{U01} & \textbf{U02} & \textbf{U03} & \textbf{U04} &
+  \textbf{U05} & \textbf{U06} & \textbf{U07} &
+  \textbf{U08} & \textbf{U10} & \textbf{U11} \\
+\midrule
+\multicolumn{11}{l}{\textit{Reference configurations}}\\[2pt]
+\rowcolor{rowgray}
+\mosho{} (full) &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark
+                &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark\\
+MOSHO-Base      &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark
+                &\checkmark&\checkmark&$\times$  &$\times$  &$\times$  \\
+\mowso{}        &$\times$  &$\times$  &$\times$  &$\times$  &$\times$
+                &$\times$  &$\times$  &$\times$  &$\times$  &$\times$  \\
+\midrule
+\multicolumn{11}{l}{\textit{OAT ablations}}\\[2pt]
+\ablof{U01} &$\times$  &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark\\
+\ablof{U02} &\checkmark&$\times$  &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark\\
+\ablof{U03} &\checkmark&\checkmark&$\times$  &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark\\
+\ablof{U04} &\checkmark&\checkmark&\checkmark&$\times$  &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark\\
+\ablof{U05} &\checkmark&\checkmark&\checkmark&\checkmark&$\times$  &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark\\
+\ablof{U06} &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&$\times$  &\checkmark&\checkmark&\checkmark&\checkmark\\
+\ablof{U07} &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&$\times$  &\checkmark&\checkmark&\checkmark\\
+\ablof{U08} &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&$\times$  &\checkmark&\checkmark\\
+\ablof{U10} &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&$\times$  &\checkmark\\
+\ablof{U11} &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&$\times$  \\
+\midrule
+\multicolumn{11}{l}{\textit{Group ablations}}\\[2pt]
+G-SEARCH  &$\times$&$\times$&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark\\
+G-ADAPT   &\checkmark&\checkmark&\checkmark&\checkmark&$\times$&$\times$&$\times$&\checkmark&\checkmark&\checkmark\\
+G-ARCHIVE &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&$\times$&$\times$&\checkmark\\
+G-NOADV   &\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&\checkmark&$\times$&$\times$&$\times$\\
+G-NOBASE  &$\times$&$\times$&$\times$&$\times$&$\times$&$\times$&$\times$&\checkmark&\checkmark&\checkmark\\
+G-CORE    &\checkmark&$\times$&$\times$&\checkmark&\checkmark&\checkmark&\checkmark&$\times$&$\times$&$\times$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Experimental Setup}
+\label{sec:design_setup}
+
+\subsubsection{Hyperparameter Settings}
+\label{sec:design_params}
+
+All variants share the hyperparameter configuration in
+Table~\ref{tab:params}.  Seeds are fixed identically across variants to
+enable paired statistical comparisons.
+
+\begin{table}[H]
+\centering
+\caption{Hyperparameter settings shared across all variants.}
+\label{tab:params}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\linewidth}{l l X}
+\toprule
+\textbf{Parameter} & \textbf{Value} & \textbf{Justification} \\
+\midrule
+Population size $N$           & 50
+  & Standard for multi-objective swarms \\
+Archive size $M$              & 50
+  & Equal to $N$ for fair comparison \\
+Iterations                    & 200
+  & Computed as $B/N = 10\,000/50$ \\
+Evaluation budget $B$         & 10\,000
+  & Precision/cost trade-off \\
+Repetitions $R$               & 30
+  & Minimum for non-parametric tests ($p < 0.05$) \\
+Random seeds & $42 + r \times 7,\; r=0,\dots,29$
+  & Full reproducibility, identical across variants \\
+Datasets & CIFAR-10, CIFAR-100, ImageNet16-120
+  & Standard NAS-Bench-201 dataset contexts \\
+Devices & edgegpu, edgetpu, eyeriss, fpga, pixel3, raspi4
+  & Six hardware-latency contexts per dataset \\
+Sliding window $H$            & 20
+  & Improvement rate $r_t$ computation (U06) \\
+Initial energy $e_0$          & 0.818
+  & Initial shark energy in the implementation \\
+$\eta$                       & 15.0
+  & MOSHO constructor parameter retained for reproducibility \\
+$\beta_1$ (energy gain, archive improved) & 0.20
+  & Fast gain when archive improves (U05) \\
+$\beta_2$ (energy gain, accepted)         & 0.05
+  & Slow gain otherwise (U05) \\
+$\delta$ (energy decay)       & 0.0968
+  & Slow decay to avoid premature restarts \\
+$e_{\min}$ (restart threshold)& 0.508
+  & Restart trigger (U05) \\
+Maximum energy $e_{\max}$     & 1.699
+  & Upper energy cap \\
+Cluster activation threshold (U08) & $5^6=15\,625 < 100\,000$
+  & Cluster sampling is disabled for this NAS-Bench-201 search space \\
+K-means minimum archive size (U08) & 20
+  & Minimum archive size before cluster sampling can activate \\
+K-means refresh / iterations (U08) & 4 / 12
+  & Cache refresh period and maximum Lloyd iterations \\
+Collapse threshold $\varepsilon$ (U11) & $10^{-3}$
+  & Latency degeneracy detection threshold \\
+Mono-objective patience / refresh (U11) & 3 / 12
+  & Number of checks before activation and refresh interval \\
+Post-crossover mutation prob.\ (U02) & 0.30
+  & Single-gene mutation after crossover \\
+Base operator probabilities & 0.20 / 0.25 / 0.15 / 0.10 / 0.20 / 0.10
+  & Patrol / Scent / Circle / Burst / Crossover / Scout \\
+Mutual non-dominance acceptance & $0.4(1-0.7p_t)$
+  & U04 acceptance probability schedule \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsubsection{Performance Metrics}
+\label{sec:design_metrics}
+
+Four metrics capture complementary facets of Pareto front quality
+(Table~\ref{tab:metrics}).
+\begin{table}[H]
+\centering
+\caption{Evaluation metrics and optimisation directions}
+\label{tab:metrics}
+\renewcommand{\arraystretch}{1.5} % Augmenté un peu pour l'aération
+
+\begin{tabularx}{\linewidth}{@{} l >{\raggedright\arraybackslash}p{3.5cm} >{\raggedright\arraybackslash}X l c @{}}
+\toprule
+\textbf{Symbol} & \textbf{Full name} & \textbf{Definition / Interpretation} & \textbf{Facet} & \textbf{Dir.} \\
+\midrule
+
+$\mathrm{IGD}^+$ & 
+Inverted Generational Distance Plus & 
+Modified IGD measuring the Euclidean distance from each reference point to the nearest solution in the approximation set, clipped at zero. It penalises poor coverage while remaining Pareto-compliant. & 
+Conv. + Cov. & $\downarrow$ \\ \addlinespace
+
+$\mathrm{nHV}$ & 
+Normalised Hypervolume & 
+Hypervolume dominated by the approximation front, normalised by a reference hypervolume, yielding a score in $[0,1]$. & 
+Conv. + Div. & $\uparrow$ \\ \addlinespace
+
+$\mathrm{SP}$ & 
+Spacing & 
+Standard deviation of distances between consecutive solutions along the approximation front, reflecting distribution uniformity. & 
+Uniformity & $\downarrow$ \\ \addlinespace
+
+$T$ & 
+Execution Time & 
+Wall-clock time (in seconds) per run, used to assess computational overhead (notably for U03 and U08). & 
+Efficiency & $\downarrow$ \\
+
+\bottomrule
+\end{tabularx}
+\end{table}
+% ============================================================
+\section{Experimental Results}
+\label{sec:results}
+% ============================================================
+
+All tables report \textbf{median values over 30 paired runs}, after
+averaging the 18 context-level measurements within each run.  The values
+in this section are computed directly from
+\texttt{experiments/results\_ablation\_study}.  The execution contains
+full \mosho{}, MOSHO-Base, ten OAT ablations, and six group ablations.
+The \mowso{} baseline was not included in this execution root.
+
+\subsection{Median Performance --- OAT Ablations and Baselines}
+\label{sec:results_oat}
+
+\begin{table}[H]
+\centering
+\caption{Median performance --- OAT ablations and reference
+  configurations.
+  $\downarrow$~lower is better; $\uparrow$~higher is better.}
+\label{tab:res_oat}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{6pt}
+\small
+\begin{tabular}{l
+    S[table-format=1.4]
+    S[table-format=1.4]
+    S[table-format=1.4]
+    S[table-format=2.2]}
+\toprule
+\textbf{Variant} &
+  {\textbf{IGD}$^+$ $\downarrow$} &
+  {\textbf{nHV} $\uparrow$} &
+  {\textbf{SP} $\downarrow$} &
+  {\textbf{Time (s)} $\downarrow$} \\
+\midrule
+\mosho{} (full) & 0.0202 & 0.9984 & 5.3494 & 0.65 \\
+MOSHO-Base      & 0.0249 & 0.9983 & 5.4065 & 0.62 \\
+\mowso{}        & \multicolumn{4}{c}{not run in \texttt{results\_ablation\_study}} \\
+\midrule
+\ablof{U01}     & 0.0206 & 0.9981 & 5.3636 & 0.61 \\
+\ablof{U02}     & 0.0188 & 0.9987 & 5.3809 & 0.82 \\
+\ablof{U03}     & 0.0202 & 0.9984 & 5.3496 & 0.63 \\
+\ablof{U04}     & 0.0297 & 0.9976 & 5.4055 & 0.30 \\
+\ablof{U05}     & 0.0168 & 0.9987 & 5.3222 & 0.36 \\
+\ablof{U06}     & 0.0208 & 0.9985 & 5.3406 & 0.62 \\
+\ablof{U07}     & 0.0173 & 0.9986 & 5.3162 & 0.40 \\
+\ablof{U08}     & 0.0076 & 0.9994 & 5.2800 & 0.55 \\
+\ablof{U10}     & 0.0202 & 0.9984 & 5.3494 & 0.62 \\
+\ablof{U11}     & 0.0202 & 0.9984 & 5.3494 & 0.63 \\
+\bottomrule
+\end{tabular}\end{table}
+
+\subsection{Median Performance --- Group Ablations}
+\label{sec:results_group}
+
+\begin{table}[H]
+\centering
+\caption{Median performance --- group ablations.}
+\label{tab:res_group}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{6pt}
+\small
+\begin{tabular}{l l
+    S[table-format=1.4]
+    S[table-format=1.4]
+    S[table-format=1.4]
+    S[table-format=2.2]}
+\toprule
+\textbf{Variant} & \textbf{Units removed} &
+  {\textbf{IGD}$^+$ $\downarrow$} &
+  {\textbf{nHV} $\uparrow$} &
+  {\textbf{SP} $\downarrow$} &
+  {\textbf{Time (s)} $\downarrow$} \\
+\midrule
+G-SEARCH  & U01 + U02         & 0.0222 & 0.9980 & 5.3734 & 0.60 \\
+G-ADAPT   & U05 + U06 + U07   & 0.0193 & 0.9985 & 5.3165 & 0.35 \\
+G-ARCHIVE & U08 + U10         & 0.0076 & 0.9994 & 5.2800 & 0.54 \\
+G-NOADV   & U08 + U10 + U11   & 0.0076 & 0.9994 & 5.2800 & 0.54 \\
+G-NOBASE  & U01--U07          & 0.0514 & 0.9940 & 5.4332 & 0.28 \\
+G-CORE    & U02,U03,U08,U10,U11 & 0.0075 & 0.9995 & 5.2847 & 0.55 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Robustness: Inter-Quartile Range}
+\label{sec:results_iqr}
+
+Table~\ref{tab:iqr} reports the inter-quartile range (IQR) of IGD$^+$
+and nHV to characterise result robustness across the 30 independent runs.
+Narrower IQR indicates more consistent behaviour.
+
+\begin{table}[H]
+\centering
+\caption{Robustness --- IQR of IGD$^+$ and nHV over 30 runs.}
+\label{tab:iqr}
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{8pt}
+\small
+\begin{tabular}{l
+    S[table-format=1.4] S[table-format=1.4]
+    S[table-format=1.4] S[table-format=1.4]}
+\toprule
+ & \multicolumn{2}{c}{\textbf{IGD}$^+$}
+ & \multicolumn{2}{c}{\textbf{nHV}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+\textbf{Variant} & {Median} & {IQR} & {Median} & {IQR} \\
+\midrule
+\mosho{} (full) & 0.0202 & 0.0033 & 0.9984 & 0.0004 \\
+MOSHO-Base      & 0.0249 & 0.0031 & 0.9983 & 0.0005 \\
+\midrule
+\ablof{U01}     & 0.0206 & 0.0039 & 0.9981 & 0.0006 \\
+\ablof{U02}     & 0.0188 & 0.0034 & 0.9987 & 0.0004 \\
+\ablof{U03}     & 0.0202 & 0.0029 & 0.9984 & 0.0004 \\
+\ablof{U04}     & 0.0297 & 0.0046 & 0.9976 & 0.0007 \\
+\ablof{U05}     & 0.0168 & 0.0032 & 0.9987 & 0.0005 \\
+\ablof{U06}     & 0.0208 & 0.0030 & 0.9985 & 0.0002 \\
+\ablof{U07}     & 0.0173 & 0.0049 & 0.9986 & 0.0006 \\
+\ablof{U08}     & 0.0076 & 0.0020 & 0.9994 & 0.0002 \\
+\ablof{U10}     & 0.0202 & 0.0033 & 0.9984 & 0.0004 \\
+\ablof{U11}     & 0.0202 & 0.0033 & 0.9984 & 0.0004 \\
+\midrule
+G-SEARCH        & 0.0222 & 0.0049 & 0.9980 & 0.0009 \\
+G-ADAPT         & 0.0193 & 0.0027 & 0.9985 & 0.0004 \\
+G-ARCHIVE       & 0.0076 & 0.0020 & 0.9994 & 0.0002 \\
+G-NOADV         & 0.0076 & 0.0020 & 0.9994 & 0.0002 \\
+G-NOBASE        & 0.0514 & 0.0062 & 0.9940 & 0.0010 \\
+G-CORE          & 0.0075 & 0.0020 & 0.9995 & 0.0002 \\
+\bottomrule
+\end{tabular}\end{table}
+
+% ============================================================
+\section{Performance Impact Analysis}
+\label{sec:impact}
+% ============================================================
+
+\subsection{Normalised Impact Scores}
+\label{sec:impact_norm}
+
+The \emph{normalised impact score} for unit $U_i$ on metric $m$ is:
+
+\begin{equation}
+  \mathrm{Impact}_{\mathrm{nHV}}(U_i) =
+  \frac{\mathrm{nHV}(\text{\mosho{}}) - \mathrm{nHV}(\text{\ablof{$U_i$}})}
+       {\mathrm{nHV}(\text{\mosho{}}) - \mathrm{nHV}(\text{MOSHO-Base})}
+  \times 100\%
+  \label{eq:impact}
+\end{equation}
+
+\noindent For IGD$^+$, the numerator and denominator are reversed because
+lower is better:
+$(\mathrm{IGD}^+(\text{\ablof{$U_i$}})-\mathrm{IGD}^+(\text{\mosho{}})) /
+(\mathrm{IGD}^+(\text{MOSHO-Base})-\mathrm{IGD}^+(\text{\mosho{}}))$.
+A score of 100\% means the unit explains the full gap between full
+\mosho{} and MOSHO-Base.  Negative scores mean that removing the unit
+improved the corresponding median metric in this execution.
+
+\begin{table}[H]
+\centering
+\caption{Normalised impact scores (\%) on nHV and IGD$^+$.
+  Colour bands:
+  \colorbox{critred!25}{$>$60\%~critical},
+  \colorbox{imptorange!25}{40--60\%~important},
+  \colorbox{modblue!20}{20--40\%~moderate},
+  \colorbox{marggreen!20}{$<$20\%~marginal}.}
+\label{tab:impact}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\tabcolsep}{10pt}
+\begin{tabular}{l c c c}
+\toprule
+\textbf{Unit} & \textbf{Name} &
+  \textbf{Impact on nHV (\%)} &
+  \textbf{Impact on IGD}$^+$ \textbf{(\%)} \\
+\midrule
+U04 & Explicit acceptance  & \cellcolor{critred!25}515.1 & \cellcolor{critred!25}202.8 \\
+U01 & Discrete kernels     & \cellcolor{critred!25}199.0 & \cellcolor{marggreen!20}~9.3 \\
+U06 & Dual adaptive signal & \cellcolor{marggreen!20}-32.0 & \cellcolor{marggreen!20}14.1 \\
+U03 & Deferred truncation  & \cellcolor{marggreen!20}10.5 & \cellcolor{marggreen!20}~0.0 \\
+U10 & Extreme solutions    & \cellcolor{marggreen!20}~0.0 & \cellcolor{marggreen!20}~0.0 \\
+U11 & Mono-obj.\ fallback  & \cellcolor{marggreen!20}~0.0 & \cellcolor{marggreen!20}~0.0 \\
+U07 & Active archive       & \cellcolor{marggreen!20}-89.6 & \cellcolor{marggreen!20}-60.8 \\
+U02 & Uniform crossover    & \cellcolor{marggreen!20}-138.6 & \cellcolor{marggreen!20}-29.6 \\
+U05 & Energy + restart     & \cellcolor{marggreen!20}-150.2 & \cellcolor{marggreen!20}-71.8 \\
+U08 & K-means archive      & \cellcolor{marggreen!20}-604.5 & \cellcolor{marggreen!20}-266.6 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Absolute Performance Deltas}
+\label{sec:impact_delta}
+
+Table~\ref{tab:delta} reports the absolute performance delta against
+full \mosho{}.  For lower-is-better metrics (IGD$^+$, SP, time),
+$\Delta = \text{variant} - \text{\mosho{}}$; for nHV,
+$\Delta = \text{\mosho{}} - \text{variant}$.  Positive quality deltas
+therefore indicate that \mosho{} is better; negative time deltas indicate
+that the variant is faster.
+
+\begin{table}[H]
+\centering
+\caption{Absolute performance deltas.
+  Positive $\Delta$IGD$^+$ and $\Delta$SP indicate \mosho{} is better;
+  positive $\Delta$nHV indicates \mosho{} achieves higher hypervolume;
+  negative $\Delta$Time indicates the variant is faster.}
+\label{tab:delta}
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{7pt}
+\small
+\begin{tabular}{l
+    S[table-format=+1.4]
+    S[table-format=+1.4]
+    S[table-format=+1.4]
+    S[table-format=+2.2]}
+\toprule
+\textbf{Variant} &
+  {$\Delta$\,IGD$^+$} &
+  {$\Delta$\,nHV} &
+  {$\Delta$\,SP} &
+  {$\Delta$\,Time (s)} \\
+\midrule
+MOSHO-Base      & +0.0047 & +0.0002 & +0.0570 & -0.03 \\
+\mowso{}        & \multicolumn{4}{c}{not run in \texttt{results\_ablation\_study}} \\
+\midrule
+\ablof{U01}     & +0.0004 & +0.0003 & +0.0142 & -0.04 \\
+\ablof{U02}     & -0.0014 & -0.0002 & +0.0314 & +0.17 \\
+\ablof{U03}     & +0.0000 & +0.0000 & +0.0001 & -0.02 \\
+\ablof{U04}     & +0.0095 & +0.0008 & +0.0560 & -0.35 \\
+\ablof{U05}     & -0.0034 & -0.0002 & -0.0272 & -0.30 \\
+\ablof{U06}     & +0.0007 & -0.0001 & -0.0088 & -0.03 \\
+\ablof{U07}     & -0.0029 & -0.0001 & -0.0332 & -0.25 \\
+\ablof{U08}     & -0.0125 & -0.0010 & -0.0695 & -0.10 \\
+\ablof{U10}     & +0.0000 & +0.0000 & +0.0000 & -0.03 \\
+\ablof{U11}     & +0.0000 & +0.0000 & +0.0000 & -0.02 \\
+\bottomrule
+\end{tabular}\end{table}
+
+\noindent\textbf{Key observation on execution time.}
+The fastest OAT variant is \ablof{U04} (0.30~s), reflecting the cost
+saved by unconditional acceptance.  \ablof{U02} is the only OAT variant
+slower than full \mosho{} in median runtime (+0.17~s), while U10 and U11
+are numerically identical in quality to full \mosho{} and slightly faster.
+
+% ============================================================
+\section{Statistical Analysis}
+\label{sec:stat}
+% ============================================================
+
+\subsection{Statistical Pipeline}
+\label{sec:stat_pipeline}
+
+The statistical framework adopted here is a \textbf{three-step mandatory
+suite}, complemented by an optional fourth step for added robustness.
+Each step is motivated by the design and the conventions of the
+evolutionary computation literature.
+
+\begin{table}[H]
+\centering
+\caption{Statistical analysis pipeline.}
+\label{tab:pipeline}
+\renewcommand{\arraystretch}{1.35}
+\setlength{\tabcolsep}{6pt}
+\small
+\begin{tabular}{c l p{6.5cm} l}
+\toprule
+\textbf{Step} & \textbf{Method} & \textbf{Purpose} & \textbf{Status} \\
+\midrule
+1 & Wilcoxon Signed-Rank Test (paired)
+  & Test whether removing each unit $U_i$ significantly degrades
+    performance.  Directly matches the paired-seed design and is
+    distribution-free.
+  & \textbf{\textcolor{pipelinered}{Mandatory}} \\
+2 & Holm--Bonferroni Correction
+  & Control the Family-Wise Error Rate across $m=10$ simultaneous
+    comparisons. 
+  & \textbf{\textcolor{pipelineorange}{Mandatory}} \\
+3 & Vargha--Delaney $A_{12}$ Effect Size
+  & Quantify the \emph{magnitude} of each unit's contribution beyond
+    binary significance; required for tier classification.
+  & \textbf{\textcolor{pipelineyellow}{Mandatory}} \\
+4 & Bootstrap 95\% Confidence Intervals
+  & Provide interval estimates for median differences and $A_{12}$;
+    strengthens robustness claims.
+  & \textcolor{pipelinegreen}{\textbf{Optional}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Step 1 --- Wilcoxon Signed-Rank Test}
+\label{sec:stat_wilcoxon}
+
+When per-unit ablation runs are available, the \textbf{Wilcoxon
+signed-rank test} compares \mosho{} and \ablof{$U_i$} over the $R=30$
+paired runs:
+
+\[
+d_r = \mathrm{IGD}^+(\ablof{$U_i$},\,r)
+      - \mathrm{IGD}^+(\mosho{},\,r),
+\quad r = 1,\dots,30.
+\]
+
+\noindent\textbf{Hypotheses:}
+\begin{itemize}[leftmargin=2em, itemsep=1pt]
+  \item $H_0$: the median of $d_r$ is zero (no difference).
+  \item $H_1$: the median of $d_r$ is greater than zero
+        (removal increases IGD$^+$, i.e.\ degrades performance).
+\end{itemize}
+
+Significance level: $\alpha = 0.05$.  A significant positive shift
+confirms a beneficial contribution of the removed unit.
+
+\subsection{Step 2 --- Multiple Comparison Control: Holm--Bonferroni}
+\label{sec:stat_holm}
+
+With $m = 10$ simultaneous tests, unadjusted $p$-values inflate the
+probability of false positives.  The \textbf{Holm--Bonferroni procedure}
+controls the Family-Wise Error Rate (FWER) while retaining greater
+statistical power than classical Bonferroni.
+
+Let $p_1 \leq p_2 \leq \dots \leq p_m$ be the sorted $p$-values.
+Each is compared against the adjusted threshold:
+
+\[
+\alpha_i = \frac{0.05}{m - i + 1}.
+\]
+
+The procedure rejects $H_0$ for all $p_j$ with $j \leq i^*$, where
+$i^*$ is the last index satisfying $p_{i^*} \leq \alpha_{i^*}$.
+All subsequent hypotheses are retained.
+
+\subsection{Step 3 --- Effect Size: Vargha--Delaney $A_{12}$}
+\label{sec:stat_a12}
+
+Statistical significance alone does not convey practical importance.
+The \textbf{Vargha--Delaney $A_{12}$} effect size is therefore computed
+for every comparison:
+
+\[
+A_{12}(\mosho{},\,\ablof{$U_i$})
+=
+P\!\bigl(\mosho{} < \ablof{$U_i$}\bigr)
++ \tfrac{1}{2}\,
+P\!\bigl(\mosho{} = \ablof{$U_i$}\bigr).
+\]
+
+This is the probability that \mosho{} achieves a lower (better) IGD$^+$
+than the ablated variant.  Interpretation thresholds follow
+Table~\ref{tab:a12_thresholds}.
+
+\begin{table}[H]
+\centering
+\caption{Vargha--Delaney $A_{12}$ interpretation thresholds.}
+\label{tab:a12_thresholds}
+\renewcommand{\arraystretch}{1.3}
+\small
+\begin{tabular}{cll}
+\toprule
+$A_{12}$ & \textbf{Magnitude} & \textbf{Interpretation} \\
+\midrule
+0.50           & None   & No observable difference \\
+0.51 -- 0.56   & Small  & Weak advantage for \mosho{} \\
+0.57 -- 0.71   & Medium & Moderate advantage for \mosho{} \\
+$> 0.71$       & Large  & Strong advantage for \mosho{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Decision Rule}
+\label{sec:stat_decision}
+
+Each unit is classified by combining adjusted $p$-value and $A_{12}$:
+
+\begin{itemize}[leftmargin=2em, itemsep=4pt]
+  \item Adjusted $p < 0.05$ \textbf{and} $A_{12} > 0.71$:
+        \quad\critical{Critical contribution.}
+  \item Adjusted $p < 0.05$ \textbf{and} $0.57 \leq A_{12} \leq 0.71$:
+        \quad\important{Important contribution.}
+  \item Adjusted $p < 0.05$ \textbf{and} $0.51 \leq A_{12} < 0.57$:
+        \quad\secondary{Moderate contribution.}
+  \item Adjusted $p \geq 0.05$:
+        \quad\neutral{No statistically significant quality contribution.}
+\end{itemize}
+
+\noindent This combined criterion ensures conclusions are both
+statistically valid and practically meaningful.
+
+\subsection{Results}
+\label{sec:stat_results}
+
+\subsubsection{Pairwise Test Results (Wilcoxon + $A_{12}$)}
+\label{sec:stat_pairwise}
+
+Table~\ref{tab:wilcoxon} reports the Wilcoxon signed-rank test results
+for the OAT ablations available in the supplied result root.  The same
+paired-run aggregation is used as in the descriptive tables.
+
+\begin{table}[H]
+\centering
+\caption{Wilcoxon signed-rank results on IGD$^+$ and nHV
+  (30 paired runs, Holm--Bonferroni adjusted).
+  $H_0$: no difference vs.\ full \mosho{}.
+  Significance: $^{*}p<0.05$;\ $^{**}p<0.01$;
+  $^{***}p<0.001$;\ \textsf{ns}~not significant.}
+\label{tab:wilcoxon}
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{5pt}
+\small
+\begin{tabular}{l
+    S[table-format=1.4] c c
+    S[table-format=1.4] c c}
+\toprule
+ & \multicolumn{3}{c}{\textbf{IGD}$^+$}
+ & \multicolumn{3}{c}{\textbf{nHV}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+\textbf{Variant} &
+  {$p$-value} & {Sig.} & {$\hat{A}_{12}$} &
+  {$p$-value} & {Sig.} & {$\hat{A}_{12}$} \\
+\midrule
+\ablof{U01} & 0.0000 & $^{***}$ & 0.62 & 0.0000 & $^{***}$ & 0.73 \\
+\ablof{U02} & 1.0000 & \textsf{ns} & 0.37 & 1.0000 & \textsf{ns} & 0.40 \\
+\ablof{U03} & 0.0000 & $^{***}$ & 0.50 & 0.0000 & $^{***}$ & 0.50 \\
+\ablof{U04} & 0.0000 & $^{***}$ & 1.00 & 0.0000 & $^{***}$ & 0.98 \\
+\ablof{U05} & 1.0000 & \textsf{ns} & 0.16 & 1.0000 & \textsf{ns} & 0.31 \\
+\ablof{U06} & 0.0000 & $^{***}$ & 0.61 & 1.0000 & \textsf{ns} & 0.43 \\
+\ablof{U07} & 1.0000 & \textsf{ns} & 0.18 & 1.0000 & \textsf{ns} & 0.45 \\
+\ablof{U08} & 1.0000 & \textsf{ns} & 0.00 & 1.0000 & \textsf{ns} & 0.00 \\
+\ablof{U10} & 1.0000 & \textsf{ns} & 0.50 & 1.0000 & \textsf{ns} & 0.50 \\
+\ablof{U11} & 1.0000 & \textsf{ns} & 0.50 & 1.0000 & \textsf{ns} & 0.50 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Unit Ranking by Median IGD$^+$}
+\label{sec:stat_ranking}
+
+Table~\ref{tab:ranking} ranks the reference and OAT ablation variants by
+median IGD$^+$ and cross-references the $A_{12}$ effect size against full
+\mosho{} where applicable.
+
+\begin{table}[H]
+\centering
+\caption{Variant ranking by median IGD$^+$ (ascending = better),
+  cross-referenced with $\hat{A}_{12}$ against full \mosho{}.}
+\label{tab:ranking}
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{9pt}
+\small
+\begin{tabular}{l c c c c}
+\toprule
+\textbf{Variant} &
+  \textbf{Median IGD}$^+$ &
+  \textbf{Rank} &
+  $\hat{A}_{12}$ &
+  \textbf{Interpretation} \\
+\midrule
+\ablof{U08}     & 0.0076 & 1  & 0.00 & Ablation improves median IGD$^+$ \\
+\ablof{U05}     & 0.0168 & 2  & 0.16 & Ablation improves median IGD$^+$ \\
+\ablof{U07}     & 0.0173 & 3  & 0.18 & Ablation improves median IGD$^+$ \\
+\ablof{U02}     & 0.0188 & 4  & 0.37 & Ablation improves median IGD$^+$ \\
+\ablof{U10}     & 0.0202 & 5  & 0.50 & No observable median change \\
+\ablof{U11}     & 0.0202 & 6  & 0.50 & No observable median change \\
+\mosho{} (full) & 0.0202 & 7  & ---  & Reference \\
+\ablof{U03}     & 0.0202 & 8  & 0.50 & No observable median change \\
+\ablof{U01}     & 0.0206 & 9  & 0.62 & Full \mosho{} improves quality \\
+\ablof{U06}     & 0.0208 & 10 & 0.61 & Full \mosho{} improves quality \\
+MOSHO-Base      & 0.0249 & 11 & ---  & Reference baseline \\
+\ablof{U04}     & 0.0297 & 12 & 1.00 & Full \mosho{} improves quality \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Step 4 --- Bootstrap Confidence Intervals (Optional)}
+\label{sec:stat_bootstrap}
+
+Bootstrap 95\% confidence intervals may be computed for:
+\begin{itemize}[leftmargin=2em, itemsep=2pt]
+  \item the median difference in IGD$^+$
+        ($\Delta_{\mathrm{med}} = \mathrm{med}(d_r)$), and
+  \item the Vargha--Delaney $A_{12}$ effect size.
+\end{itemize}
+
+Resampling is performed with replacement over the $R=30$ paired runs
+($10^4$ resamples).  A confidence interval for $\Delta_{\mathrm{med}}$
+that excludes zero, or for $A_{12}$ that excludes 0.5, reinforces the
+Wilcoxon conclusions and provides the most rigorous evidence available
+for the contribution of each unit.  This step is recommended for
+camera-ready or journal submissions.
+
+% ============================================================
+\section{Interpretation and Discussion}
+\label{sec:interp}
+% ============================================================
+
+\subsection{Unit Classification Summary}
+\label{sec:interp_class}
+
+Table~\ref{tab:classification} consolidates the current OAT evidence.
+Here, positive impact means that removing the unit degraded the median
+relative to full \mosho{}; negative impact means the ablation improved
+the median in this execution.
+
+\begin{table}[H]
+\centering
+\caption{Final unit classification across all evidence sources.}
+\label{tab:classification}
+\renewcommand{\arraystretch}{1.3}
+\setlength{\tabcolsep}{5pt}
+\small
+\begin{tabular}{c l c c c l}
+\toprule
+\textbf{Unit} & \textbf{Name} &
+  \textbf{Impact (\%)} & $\hat{A}_{12}$ &
+  \textbf{Wilcoxon} & \textbf{Tier} \\
+\midrule
+U04 & Explicit acceptance  & 515.1 & 1.00 & $^{***}$ & \textbf{Critical} \\
+U01 & Discrete kernels     & 199.0 & 0.62 & $^{***}$ & \textbf{Important} \\
+U06 & Dual adaptive signal & -32.0 & 0.61 & $^{***}$ & \textbf{Important on IGD$^+$ only} \\
+U03 & Deferred truncation  & 10.5 & 0.50 & $^{***}$ & \textbf{Statistical, negligible effect} \\
+U10 & Extreme solutions    & 0.0 & 0.50 & \textsf{ns} & \textbf{No observed effect} \\
+U11 & Mono-obj.\ fallback  & 0.0 & 0.50 & \textsf{ns} & \textbf{No observed effect} \\
+U02 & Uniform crossover    & -138.6 & 0.37 & \textsf{ns} & \textbf{Ablation improves median} \\
+U05 & Energy + restart     & -150.2 & 0.16 & \textsf{ns} & \textbf{Ablation improves median} \\
+U07 & Active archive       & -89.6 & 0.18 & \textsf{ns} & \textbf{Ablation improves median} \\
+U08 & K-means archive      & -604.5 & 0.00 & \textsf{ns} & \textbf{Ablation improves median} \\
+\bottomrule
+\multicolumn{6}{l}{Impact column is nHV impact normalised by the MOSHO vs MOSHO-Base gap.} \\
+\end{tabular}
+\end{table}
+
+\subsection{Key Findings}
+\label{sec:interp_findings}
+
+\begin{enumerate}[leftmargin=*, nosep, itemsep=6pt]
+
+  \item \textbf{Full \mosho{} improves over MOSHO-Base, but the gain is
+  small.}
+  The median IGD$^+$ improves from 0.0249 to 0.0202 and nHV improves
+  from 0.9983 to 0.9984.  MOSHO-Base is slightly faster in median
+  runtime (0.62~s versus 0.65~s for full \mosho{}).
+
+  \item \textbf{Explicit acceptance (U04) is the clearest positive unit.}
+  Removing U04 gives the worst OAT median IGD$^+$ (0.0297) and nHV
+  (0.9976), with large $A_{12}$ values and Holm-adjusted significance.
+
+  \item \textbf{Several ablations outperform full \mosho{} on median
+  quality.}
+  Removing U08, U05, U07, and U02 improves median IGD$^+$ relative to
+  full \mosho{}.  U08 is especially notable: \ablof{U08}, G-ARCHIVE, and
+  G-NOADV all obtain IGD$^+\approx0.0076$ and nHV$\approx0.9994$.
+
+  \item \textbf{U10 and U11 have no measurable effect in this execution.}
+  \ablof{U10} and \ablof{U11} are numerically identical to full \mosho{}
+  on the reported quality medians, which is consistent with the code path:
+  U08 cluster sampling is inactive for the $5^6$ search space, and U11
+  only activates when the latency-degeneracy condition is met.
+
+\end{enumerate}
+
+
+\section{Conclusion}
+\end{document}

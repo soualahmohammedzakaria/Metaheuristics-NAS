@@ -526,6 +526,7 @@ class MOSHOSearch:
     ]
     GENE_SIZE = 6
     GENE_VALUES = list(range(len(OPS)))
+    SUPPORTED_UNITS = frozenset({"U01", "U02", "U03", "U04", "U05", "U06", "U07"})
 
     def __init__(
         self,
@@ -534,11 +535,12 @@ class MOSHOSearch:
         pop_size: int = 50,
         max_iterations: int = 300,
         archive_size: int | None = None,
-        e0: float = 1.0,
-        e_min: float = 0.1,
-        e_max: float = 2.0,
+        e0: float = 0.818,
+        e_min: float = 0.508,
+        e_max: float = 1.699,
         eta: float = 15.0,
-        delta: float = 0.03,
+        delta: float = 0.0968,
+        disabled_units: set[str] | None = None,
         history: History | None = None,
     ):
         self.search_space = search_space
@@ -553,6 +555,11 @@ class MOSHOSearch:
         self.e_max = e_max
         self.eta = eta
         self.delta = delta
+        self.disabled_units = frozenset(disabled_units or ())
+
+        unknown_units = self.disabled_units - self.SUPPORTED_UNITS
+        if unknown_units:
+            raise ValueError(f"Unsupported MOSHO ablation units: {sorted(unknown_units)}")
 
         if self.search_space.num_edges != self.GENE_SIZE:
             raise ValueError(
@@ -607,6 +614,36 @@ class MOSHOSearch:
         new_arch[idx] = random.choice(choices)
         return new_arch
 
+    def _unit_enabled(self, code: str) -> bool:
+        return code not in self.disabled_units
+
+    def _continuous_quantize(self, values: list[float]) -> list[int]:
+        lower = float(min(self.GENE_VALUES))
+        upper = float(max(self.GENE_VALUES))
+        return [
+            int(min(upper, max(lower, round(v))))
+            for v in values
+        ]
+
+    def _continuous_like_candidate(
+        self,
+        arch: list[int],
+        *,
+        target: list[int] | None = None,
+        partner: list[int] | None = None,
+        noise_scale: float = 1.0,
+    ) -> list[int]:
+        relaxed = [float(g) for g in arch]
+        anchor = target or self._random_arch()
+        mate = partner or random.choice(self.population).genotype
+
+        for j in range(self.GENE_SIZE):
+            step = random.uniform(-noise_scale, noise_scale)
+            step += 0.55 * (anchor[j] - relaxed[j])
+            step += 0.25 * (mate[j] - relaxed[j])
+            relaxed[j] += step
+        return self._continuous_quantize(relaxed)
+
     def _crowding_scores(self, inds: list[Individual]) -> list[float]:
         if not inds:
             return []
@@ -638,6 +675,26 @@ class MOSHOSearch:
                 scores[idx] += (next_v - prev_v) / (max_v - min_v)
         return scores
 
+    def _true_distance_scores(self, inds: list[Individual]) -> list[float]:
+        if len(inds) <= 1:
+            return [float("inf")] * len(inds)
+
+        scores: list[float] = []
+        for i, ind_i in enumerate(inds):
+            if ind_i.fitness is None:
+                scores.append(float("inf"))
+                continue
+
+            total = 0.0
+            for j, ind_j in enumerate(inds):
+                if i == j or ind_j.fitness is None:
+                    continue
+                total += math.sqrt(
+                    sum((a - b) ** 2 for a, b in zip(ind_i.fitness, ind_j.fitness))
+                )
+            scores.append(total)
+        return scores
+
     def _archive_update(self, candidate: Individual) -> bool:
         for archived in self.archive:
             if dominates(archived, candidate, self.evaluator.objective_directions):
@@ -667,6 +724,14 @@ class MOSHOSearch:
         if len(self.archive) <= self.archive_size:
             return
 
+        if not self._unit_enabled("U03"):
+            while len(self.archive) > self.archive_size:
+                scores = self._true_distance_scores(self.archive)
+                remove_idx = min(range(len(self.archive)), key=lambda i: scores[i])
+                del self.archive[remove_idx]
+            self._archive_sampler_dirty = True
+            return
+
         scores = self._crowding_scores(self.archive)
         order = sorted(range(len(self.archive)), key=lambda i: scores[i], reverse=True)
         keep = set(order[: self.archive_size])
@@ -690,9 +755,17 @@ class MOSHOSearch:
             self._refresh_archive_sampler()
         if not self.archive:
             raise ValueError("Cannot sample from an empty archive.")
+
+        if not self._unit_enabled("U07"):
+            scores = self._true_distance_scores(self.archive)
+            leader_idx = max(range(len(self.archive)), key=lambda i: scores[i])
+            return self.archive[leader_idx]
         return random.choices(self.archive, weights=self._archive_sampler_weights, k=1)[0]
 
     def _patrol(self, arch: list[int]) -> list[int]:
+        if not self._unit_enabled("U01"):
+            return self._continuous_like_candidate(arch, noise_scale=1.35)
+
         u = max(1e-9, random.random())
         k = int(min(self.GENE_SIZE, max(2, round((u ** -0.35) % self.GENE_SIZE))))
         k = min(self.GENE_SIZE, max(2, k))
@@ -706,6 +779,14 @@ class MOSHOSearch:
         target = self._sample_archive().genotype if self.archive else self._random_arch()
         partner = random.choice(self.population).genotype
 
+        if not self._unit_enabled("U01"):
+            return self._continuous_like_candidate(
+                arch,
+                target=target,
+                partner=partner,
+                noise_scale=0.8,
+            )
+
         new_arch = arch[:]
         for j in range(self.GENE_SIZE):
             r = random.random()
@@ -718,6 +799,9 @@ class MOSHOSearch:
         return new_arch
 
     def _circle(self, arch: list[int]) -> list[int]:
+        if not self._unit_enabled("U01"):
+            return self._continuous_like_candidate(arch, noise_scale=0.55)
+
         k = 1 if random.random() < 0.7 else 2
         idxs = random.sample(range(self.GENE_SIZE), k=k)
         new_arch = arch[:]
@@ -727,6 +811,13 @@ class MOSHOSearch:
 
     def _burst(self, arch: list[int]) -> list[int]:
         target = self._sample_archive().genotype if self.archive else self._random_arch()
+
+        if not self._unit_enabled("U01"):
+            return self._continuous_like_candidate(
+                arch,
+                target=target,
+                noise_scale=1.05,
+            )
 
         k = max(1, int(round(0.33 * self.GENE_SIZE)))
         copy_idx = set(random.sample(range(self.GENE_SIZE), k=k))
@@ -740,6 +831,9 @@ class MOSHOSearch:
         return new_arch
 
     def _crossover(self, arch: list[int]) -> list[int]:
+        if not self._unit_enabled("U02"):
+            return arch[:]
+
         if self.archive and random.random() < 0.55:
             partner = self._sample_archive().genotype
         else:
@@ -752,6 +846,8 @@ class MOSHOSearch:
         return child
 
     def _scout(self) -> list[int]:
+        if not self._unit_enabled("U01"):
+            return self._continuous_like_candidate(self._random_arch(), noise_scale=1.5)
         return self._random_arch()
 
     def _choose_operator(self, probs: dict[str, float]) -> str:
@@ -776,16 +872,39 @@ class MOSHOSearch:
         improved = max(0.0, min(1.0, imp_rate))
 
         adjusted = dict(probs)
-        adjusted["scout"] *= 1.0 + (1.0 - p) * (1.0 - improved)
-        adjusted["patrol"] *= 1.0 + 0.6 * (1.0 - p)
-        adjusted["scent"] *= 1.0 + 0.6 * p
-        adjusted["crossover"] *= 1.0 + 0.5 * p
-        adjusted["burst"] *= 1.0 + 0.3 * max(0.0, 0.2 - improved)
-        adjusted["circle"] *= 1.0 + 0.25 * improved
+        if "scout" in adjusted:
+            adjusted["scout"] *= 1.0 + (1.0 - p) * (1.0 - improved)
+        if "patrol" in adjusted:
+            adjusted["patrol"] *= 1.0 + 0.6 * (1.0 - p)
+        if "scent" in adjusted:
+            adjusted["scent"] *= 1.0 + 0.6 * p
+        if "crossover" in adjusted:
+            adjusted["crossover"] *= 1.0 + 0.5 * p
+        if "burst" in adjusted:
+            adjusted["burst"] *= 1.0 + 0.3 * max(0.0, 0.2 - improved)
+        if "circle" in adjusted:
+            adjusted["circle"] *= 1.0 + 0.25 * improved
 
         return self._normalize_probs(adjusted)
 
+    def _fixed_probability_schedule(self, progress: float) -> dict[str, float]:
+        p = max(0.0, min(1.0, progress))
+        adjusted = dict(self.base_probs)
+        if "patrol" in adjusted:
+            adjusted["patrol"] *= 1.0 + 0.5 * (1.0 - p)
+        if "scent" in adjusted:
+            adjusted["scent"] *= 1.0 + 0.4 * p
+        if "circle" in adjusted:
+            adjusted["circle"] *= 1.0 + 0.1 * (1.0 - p)
+        if "burst" in adjusted:
+            adjusted["burst"] *= 1.0 + 0.2 * p
+        if "scout" in adjusted:
+            adjusted["scout"] *= 1.0 + 0.25 * (1.0 - p)
+        return self._normalize_probs(adjusted)
+
     def _credit_biased_probs(self, probs: dict[str, float], progress: float) -> dict[str, float]:
+        if not self._unit_enabled("U07"):
+            return probs
         if not probs:
             return probs
 
@@ -817,6 +936,8 @@ class MOSHOSearch:
         archive_improved: bool,
         dominates_current: bool,
     ) -> None:
+        if not self._unit_enabled("U07"):
+            return
         reward = 0.0
         if archive_improved:
             reward = 1.0
@@ -830,14 +951,20 @@ class MOSHOSearch:
         self._op_credit[op] = (1.0 - alpha) * old + alpha * reward
 
     def _replace_low_energy(self, shark_idx: int) -> None:
+        if not self._unit_enabled("U05"):
+            return
+
         if len(self.archive) >= 2:
-            a = self._sample_archive().genotype
-            b = self._sample_archive().genotype
-            child = [a[j] if random.random() < 0.5 else b[j] for j in range(self.GENE_SIZE)]
-            for j in range(self.GENE_SIZE):
-                if random.random() < 0.15:
-                    child[j] = random.choice(self.GENE_VALUES)
-            arch = child
+            if self._unit_enabled("U07"):
+                a = self._sample_archive().genotype
+                b = self._sample_archive().genotype
+                child = [a[j] if random.random() < 0.5 else b[j] for j in range(self.GENE_SIZE)]
+                for j in range(self.GENE_SIZE):
+                    if random.random() < 0.15:
+                        child[j] = random.choice(self.GENE_VALUES)
+                arch = child
+            else:
+                arch = self._scout()
         else:
             arch = self._scout()
 
@@ -853,14 +980,22 @@ class MOSHOSearch:
         archive_improved: bool,
         progress: float,
     ) -> bool:
+        if not self._unit_enabled("U04"):
+            return True
         if dominates(candidate, current, self.evaluator.objective_directions):
             return True
-        if archive_improved:
+        if archive_improved and self._unit_enabled("U07"):
             return True
         if not dominates(current, candidate, self.evaluator.objective_directions):
             accept_prob = 0.4 * (1.0 - 0.7 * progress)
             return random.random() < accept_prob
         return False
+
+    def _active_base_probs(self) -> dict[str, float]:
+        probs = dict(self.base_probs)
+        if not self._unit_enabled("U02"):
+            probs.pop("crossover", None)
+        return self._normalize_probs(probs)
 
     def run(self) -> list[Individual]:
         self.population = []
@@ -902,7 +1037,11 @@ class MOSHOSearch:
                 imp_rate = sum(recent_improvements) / len(recent_improvements)
             else:
                 imp_rate = 0.2
-            probs = self._operator_probability_adaptation(self.base_probs, imp_rate, progress)
+            probs = self._active_base_probs()
+            if self._unit_enabled("U06"):
+                probs = self._operator_probability_adaptation(probs, imp_rate, progress)
+            else:
+                probs = self._fixed_probability_schedule(progress)
             probs = self._credit_biased_probs(probs, progress)
 
             for i in range(len(self.population)):
@@ -928,22 +1067,26 @@ class MOSHOSearch:
 
                 candidate = self._evaluate_arch(candidate_arch)
                 archive_improved = self._archive_update(candidate)
+                if not self._unit_enabled("U03"):
+                    self._truncate_archive()
                 dominates_current = dominates(candidate, shark, self.evaluator.objective_directions)
                 accepted = self._accept(shark, candidate, archive_improved, progress)
 
                 if accepted:
                     energy_bonus = 0.2 if archive_improved else 0.05
                     self.population[i] = candidate
-                    self._energy[i] = min(self.e_max, self._energy[i] + energy_bonus)
+                    if self._unit_enabled("U05"):
+                        self._energy[i] = min(self.e_max, self._energy[i] + energy_bonus)
                 else:
-                    self._energy[i] = max(0.0, self._energy[i] - self.delta)
+                    if self._unit_enabled("U05"):
+                        self._energy[i] = max(0.0, self._energy[i] - self.delta)
 
                 if archive_improved:
                     archive_change_count += 1
                 improvement_trials += 1
                 self._update_operator_credit(op, accepted, archive_improved, dominates_current)
 
-                if self._energy[i] < self.e_min:
+                if self._unit_enabled("U05") and self._energy[i] < self.e_min:
                     self._replace_low_energy(i)
 
             self._truncate_archive()
@@ -965,6 +1108,7 @@ class MOSHOSearch:
 
 class MOSHOEnhancedSearch(MOSHOSearch):
     """MOSHO with clustered archive sampling and robustness safeguards."""
+    SUPPORTED_UNITS = MOSHOSearch.SUPPORTED_UNITS | frozenset({"U08", "U10", "U11"})
 
     def __init__(
         self,
@@ -973,11 +1117,11 @@ class MOSHOEnhancedSearch(MOSHOSearch):
         pop_size: int = 50,
         max_iterations: int = 300,
         archive_size: int | None = None,
-        e0: float = 1.0,
-        e_min: float = 0.1,
-        e_max: float = 2.0,
+        e0: float = 0.818,
+        e_min: float = 0.508,
+        e_max: float = 1.699,
         eta: float = 15.0,
-        delta: float = 0.03,
+        delta: float = 0.0968,
         history: History | None = None,
         cluster_threshold: int = 100000,
         kmeans_min_archive: int = 20,
@@ -988,6 +1132,7 @@ class MOSHOEnhancedSearch(MOSHOSearch):
         latency_excellent_quantile: float = 0.1,
         mono_patience: int = 3,
         mono_refresh_interval: int = 12,
+        disabled_units: set[str] | None = None,
     ):
         super().__init__(
             search_space=search_space,
@@ -1000,6 +1145,7 @@ class MOSHOEnhancedSearch(MOSHOSearch):
             e_max=e_max,
             eta=eta,
             delta=delta,
+            disabled_units=disabled_units,
             history=history,
         )
 
@@ -1043,6 +1189,11 @@ class MOSHOEnhancedSearch(MOSHOSearch):
 
     def _truncate_archive(self) -> None:
         if len(self.archive) <= self.archive_size:
+            return
+
+        if not self._unit_enabled("U10"):
+            super()._truncate_archive()
+            self._cluster_dirty = True
             return
 
         n_obj = len(self.evaluator.objective_directions)
@@ -1160,6 +1311,9 @@ class MOSHOEnhancedSearch(MOSHOSearch):
         if not self.archive:
             raise ValueError("Cannot sample from an empty archive.")
 
+        if not self._unit_enabled("U08"):
+            return random.choice(self.archive)
+
         needs_refresh = (
             self._archive_sampler_dirty
             or len(self._archive_sampler_weights) != len(self.archive)
@@ -1230,6 +1384,9 @@ class MOSHOEnhancedSearch(MOSHOSearch):
         archive_improved: bool,
         progress: float,
     ) -> bool:
+        if not self._unit_enabled("U11"):
+            return super()._accept(current, candidate, archive_improved, progress)
+
         if self._mono_refresh_counter <= 0:
             self._update_mono_objective_mode()
             self._mono_refresh_counter = self.mono_refresh_interval
