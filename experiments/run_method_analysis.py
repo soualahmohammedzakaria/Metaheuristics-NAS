@@ -24,7 +24,7 @@ from nas_framework.replacement import ElitistReplacement, CrowdingReplacement, R
 from nas_framework.search_space import CSVSearchSpace
 from nas_framework.search_strategy import ABCFireflyStrategy,BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch, MOSHOSearch, MOSHOEnhancedSearch, PSOSearchStrategy, ABCSearchStrategy, FireflySearchStrategy, HybridMBOStrategy,  APSOESearch, NSGA2SearchStrategy
 from nas_framework.selection import TournamentSelection, RouletteWheelSelection
-from utilities.metrics import c_metric, igd_plus, non_dominated, normalized_hypervolume_to_reference_2d
+from utilities.metrics import c_metric, igd_plus, non_dominated, normalized_hypervolume_to_reference_2d, spacing
 from utilities.plotting import (
     save_context_metric_heatmap,
     save_hv_boxplot,
@@ -292,25 +292,6 @@ def _reference_point(reference_front: list[tuple[float, float]]) -> tuple[float,
     return (min_acc - 1e-9, max_lat + 1e-9)
 
 
-def _spacing(points: list[tuple[float, float]]) -> float:
-    """Spacing (SP): std-dev of distances between consecutive points along the front.
-
-    We sort by accuracy (desc) then latency (asc) to approximate the front order.
-    """
-    if len(points) < 3:
-        return 0.0
-
-    ordered = sorted(points, key=lambda p: (-p[0], p[1]))
-    dists: list[float] = []
-    for a, b in zip(ordered, ordered[1:]):
-        dx = a[0] - b[0]
-        dy = a[1] - b[1]
-        dists.append((dx * dx + dy * dy) ** 0.5)
-    if len(dists) <= 1:
-        return 0.0
-    return float(pstdev(dists))
-
-
 def _tukey_iqr(values: list[float]) -> float:
     """IQR using Tukey's hinges (median of lower/upper halves)."""
     xs = sorted(values)
@@ -437,7 +418,7 @@ def run_analysis(
             best_lat = min((p[1] for p in points), default=float("nan"))
             evals = getattr(strategy, "evaluations", 0)
 
-            sp = _spacing(points)
+            sp = spacing(points)
 
             for ind in front:
                 if ind.fitness is None:

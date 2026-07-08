@@ -17,6 +17,7 @@ from nas_framework.evaluator import Evaluator
 from nas_framework.population import Individual, Population
 from nas_framework.search_space import CSVSearchSpace
 from nas_framework.search_strategy import SkylineSearch
+from utilities.metrics import spacing
 
 DEFAULT_DATASETS = ("cifar10", "cifar100", "ImageNet16-120")
 DEFAULT_DEVICES = ("edgegpu", "edgetpu", "eyeriss", "fpga", "pixel3", "raspi4")
@@ -119,18 +120,21 @@ def run_strategy_on_contexts(
             pareto_rows_by_context.setdefault(context_key, [])
 
             if not front:
-                summary_rows.append([dataset, device, "0", "nan", "nan"])
+                summary_rows.append([dataset, device, "0", "nan", "nan", "nan"])
                 continue
 
             fits = [ind.fitness for ind in front if ind.fitness is not None]
             best_acc = max(f[0] for f in fits)
             best_lat = min(f[1] for f in fits)
+            points = [(float(f[0]), float(f[1])) for f in fits if f[0] == f[0] and f[1] == f[1]]
+            sp = spacing(points)
             summary_rows.append([
                 dataset,
                 device,
                 str(len(front)),
                 f"{best_acc:.6f}",
                 f"{best_lat:.6f}",
+                f"{sp:.6f}",
             ])
 
             for ind in front:
@@ -144,6 +148,7 @@ def run_strategy_on_contexts(
                     dataset,
                     f"{ind.fitness[0]:.6f}",
                     f"{ind.fitness[1]:.6f}",
+                    f"{sp:.6f}",
                 ]
                 pareto_rows_by_context[context_key].append(row)
                 pareto_rows_flat.append(row)
@@ -160,7 +165,7 @@ def run_strategy_on_contexts(
             print(f"Pareto Front Rows for dataset={dataset}, device={device}")
             print(
                 _format_table(
-                    ["context_id", "archid", "device", "dataset", "accuracy", "latency"],
+                    ["context_id", "archid", "device", "dataset", "accuracy", "latency", "spacing"],
                     context_rows,
                 )
             )
@@ -174,7 +179,7 @@ def run_strategy_on_contexts(
         print("\nContext Summary")
         print(
             _format_table(
-                ["dataset", "device", "pareto_size", "best_acc", "best_latency"],
+                ["dataset", "device", "pareto_size", "best_acc", "best_latency", "spacing"],
                 summary_rows,
             )
         )
@@ -183,7 +188,7 @@ def run_strategy_on_contexts(
         pareto_rows_flat.sort(key=lambda r: (int(r[0]), -float(r[4]), float(r[5])))
         _write_rows_csv(
             output_csv,
-            ["context_id", "archid", "device", "dataset", "accuracy", "latency"],
+            ["context_id", "archid", "device", "dataset", "accuracy", "latency", "spacing"],
             pareto_rows_flat,
         )
         print(f"\nSaved Pareto rows CSV: {output_csv}")

@@ -39,6 +39,7 @@ def _load_per_run_metrics(csv_path: Path) -> list[dict[str, Any]]:
                     "best_latency": _parse_float(row["best_latency"]),
                     "hv": _parse_float(row["hv"]),
                     "igd_plus": _parse_float(row["igd_plus"]),
+                    "spacing": _parse_float(row["spacing"]),
                     "c_metric": _parse_float(row["c_metric"]),
                     "runtime_sec": _parse_float(row["runtime_sec"]),
                 }
@@ -82,8 +83,10 @@ def compare_many_methods(
             pop_size=pop_size,
             budget=budget,
             seed=seed,
+            seed_step=0,
             datasets=datasets,
             devices=devices,
+            reference_fronts_csv=None,
             results_root=results_root,
         )
 
@@ -178,6 +181,7 @@ def compare_many_methods(
                 _fmt(mean(r["best_latency"] for r in rows)),
                 _fmt(mean(r["hv"] for r in rows)),
                 _fmt(mean(r["igd_plus"] for r in rows)),
+                _fmt(mean(r["spacing"] for r in rows)),
                 _fmt(mean(r["runtime_sec"] for r in rows)),
                 str(win_counts[method]),
                 str(rank_points[method]),
@@ -185,7 +189,7 @@ def compare_many_methods(
         )
 
     # Sort by rank points desc then wins desc.
-    global_rows.sort(key=lambda r: (-int(r[7]), -int(r[6]), r[0]))
+    global_rows.sort(key=lambda r: (-int(r[8]), -int(r[7]), r[0]))
 
     out_dir = results_root / "comparisons"
     methods_label = "_vs_".join(unique_methods)
@@ -206,6 +210,7 @@ def compare_many_methods(
             "best_latency_mean",
             "hv_mean",
             "igd_plus_mean",
+            "spacing_mean",
             "runtime_mean_sec",
             "context_wins",
             "rank_points",
