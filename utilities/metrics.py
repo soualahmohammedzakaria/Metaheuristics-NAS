@@ -145,6 +145,36 @@ def normalized_hypervolume_to_reference_2d(
     return ratio
 
 
+def spacing(front: Iterable[Point2D]) -> float:
+    """Compute the spacing metric for a 2D Pareto front.
+
+    The metric is the standard deviation of each point's nearest-neighbor
+    Euclidean distance. It is zero for fronts with fewer than two valid points.
+    """
+    pts = [p for p in front if not _is_nan_point(p)]
+    if len(pts) < 2:
+        return 0.0
+
+    nearest_distances: list[float] = []
+    for i, p in enumerate(pts):
+        best = float("inf")
+        for j, q in enumerate(pts):
+            if i == j:
+                continue
+            dist = sqrt((p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2)
+            if dist < best:
+                best = dist
+        if best != float("inf"):
+            nearest_distances.append(best)
+
+    if len(nearest_distances) < 2:
+        return 0.0
+
+    mean_distance = sum(nearest_distances) / len(nearest_distances)
+    variance = sum((distance - mean_distance) ** 2 for distance in nearest_distances) / (len(nearest_distances) - 1)
+    return sqrt(variance)
+
+
 def igd_plus(
     front: Iterable[Point2D],
     reference_front: Iterable[Point2D],
