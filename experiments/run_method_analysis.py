@@ -55,7 +55,7 @@ MOSHO_ABLATION_VARIANTS: dict[str, dict[str, Any]] = {
     "g_archive": {"method": "mosho_enhanced", "tex_label": "G-ARCHIVE", "disabled_units": {"U08", "U10"}, "units_removed": "U08,U10"},
     "g_noadv": {"method": "mosho_enhanced", "tex_label": "G-NOADV", "disabled_units": {"U08", "U10", "U11"}, "units_removed": "U08,U10,U11"},
     "g_nobase": {"method": "mosho_enhanced", "tex_label": "G-NOBASE", "disabled_units": {"U01", "U02", "U03", "U04", "U05", "U06", "U07"}, "units_removed": "U01,U02,U03,U04,U05,U06,U07"},
-    "g_core": {"method": "mosho_enhanced", "tex_label": "G-CORE", "disabled_units": {"U02", "U03", "U08", "U10", "U11"}, "units_removed": "U02,U03,U08,U10,U11"},
+    "g_core": {"method": "mosho_enhanced", "tex_label": "G-CORE", "disabled_units": {"U02", "U08", "U10", "U11"}, "units_removed": "U02,U08,U10,U11"},
 }
 
 
