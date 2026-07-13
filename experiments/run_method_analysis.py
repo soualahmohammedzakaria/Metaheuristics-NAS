@@ -398,7 +398,7 @@ def run_analysis(
     disabled_units: set[str] | None = None,
     output_name: str | None = None,
 ) -> Path:
-    out_dir = results_root / (output_name or method)
+    out_dir = results_root / "All_Methods" / (output_name or method)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     pareto_rows: list[list[str]] = []
