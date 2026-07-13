@@ -342,7 +342,7 @@ matplotlib>=3.7
 
 ## License
 
-This project is released for academic and research purposes. Please see the repository license for details.
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
